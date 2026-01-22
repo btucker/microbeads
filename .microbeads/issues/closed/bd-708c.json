@@ -1,14 +1,14 @@
 {
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-22T10:43:50Z",
+  "closed_reason": "Changed default prefix from 'bd' to 'mb'. Simplified merge driver config check (removed legacy bd check). Updated tests to use 'mb' prefix. The 'bd' references for beads import functionality are intentionally kept for importing from reference beads CLI.",
   "created_at": "2026-01-22T08:52:12Z",
   "dependencies": [],
   "description": "Clean up remaining references to the old 'bd' (beads) command. This includes the merge driver configuration check that looks for 'bd ' prefix, the hook removal code that checks for both 'uvx microbeads prime' and 'mb prime', and any other legacy references.",
   "id": "bd-708c",
   "labels": [],
   "priority": 3,
-  "status": "open",
+  "status": "closed",
   "title": "Remove legacy 'bd' command references",
   "type": "chore",
-  "updated_at": "2026-01-22T08:52:12Z"
+  "updated_at": "2026-01-22T10:43:50Z"
 }

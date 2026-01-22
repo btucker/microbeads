@@ -1,0 +1,16 @@
+{
+  "closed_at": "2026-01-22T10:29:42Z",
+  "closed_reason": "Added CorruptedFileError exception, graceful handling in load_issue, load_all_issues (with skip_corrupted option), get_issue. Added 'check' CLI command to detect corrupted files. Updated get_prefix to handle corrupted metadata.json.",
+  "created_at": "2026-01-22T06:06:45Z",
+  "dependencies": [],
+  "description": "load_issue() crashes on invalid JSON. Should catch JSONDecodeError and return friendly error or skip corrupted files.",
+  "id": "bd-5cd6",
+  "labels": [
+    "robustness"
+  ],
+  "priority": 2,
+  "status": "closed",
+  "title": "Handle JSON corruption gracefully",
+  "type": "bug",
+  "updated_at": "2026-01-22T10:29:42Z"
+}
