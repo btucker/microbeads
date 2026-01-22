@@ -1,88 +1,37 @@
 # Agent Instructions for Microbeads
 
-Microbeads is a simplified git-backed issue tracker designed for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch.
+Microbeads is a simplified git-backed issue tracker. Issues are JSON files on the `microbeads` orphan branch.
 
 **Note:** Initialization (`mb init`) is done by the human before agent sessions begin.
 
 ## Quick Reference
 
 ```bash
-# Create issues
-mb create "Fix authentication bug" -p 1 -t bug -l backend
-mb create "Add user dashboard" -p 2 -t feature -d "Description here"
-
-# View issues
-mb list                          # All issues
-mb list -s open                  # Filter by status
-mb ready                         # Issues with no blockers
-mb blocked                       # Issues waiting on dependencies
-mb show bd-abc                   # Show issue details
-
-# Update issues
-mb update bd-abc -s in_progress  # Change status
-mb update bd-abc -p 1            # Change priority
-mb update bd-abc --add-label urgent
-
-# Close/reopen
-mb close bd-abc -r "Completed"
-mb reopen bd-abc
-
-# Dependencies
-mb dep add bd-child bd-parent    # child depends on parent
-mb dep rm bd-child bd-parent     # remove dependency
-mb dep tree bd-abc               # show dependency tree
-
-# Sync to remote
-mb sync                          # Commit and push to orphan branch
+mb create "Title" -p 1 -t bug -l backend   # Create issue
+mb list                                     # All issues
+mb ready                                    # Issues with no blockers
+mb show bd-abc                              # Show details
+mb update bd-abc -s in_progress             # Change status
+mb close bd-abc -r "Completed"              # Close with reason
+mb dep add bd-child bd-parent               # Add dependency
+mb sync                                     # Commit and push to orphan branch
 ```
 
-## JSON Output Mode
+**Always use `--json` for programmatic access:** `mb --json list`
 
-**Always use `--json` for programmatic access:**
-
-```bash
-mb --json list
-mb --json show bd-abc
-mb --json ready
-mb --json create "New issue" -p 2
-```
-
-JSON output provides structured data suitable for parsing and automation.
-
-## Agent Session Workflow
-
-### Starting a Session
+## Session Workflow
 
 ```bash
-# 1. Check what's ready to work on
+# Start: pick an issue
 mb ready
-
-# 2. Pick an issue and mark it in progress
 mb update bd-abc -s in_progress
 
-# 3. Do the work...
-```
-
-### During Work
-
-```bash
-# Create issues for discovered work
-mb create "Found edge case in validation" -p 2 -t bug
-
-# Add dependencies as you discover them
+# During: create issues for discovered work
+mb create "Found edge case" -p 2 -t bug
 mb dep add bd-new bd-existing
 
-# Update status as work progresses
-mb update bd-abc -s in_progress
-```
-
-### Ending a Session
-
-```bash
-# Close completed work
+# End: close and sync
 mb close bd-abc -r "Implemented and tested"
-
-# Sync issues to remote
 mb sync
 ```
 
@@ -113,65 +62,6 @@ mb sync
 
 ## Visual Design
 
-**Use small Unicode symbols** for status display:
-- `○` open
-- `◐` in_progress
-- `⊗` blocked
-- `●` closed
-- `✓` completed
+Use small Unicode symbols for status: `○` open, `◐` in_progress, `●` closed
 
-**Priority format:** `P0` (critical) through `P4` (low)
-
-## Storage Architecture
-
-Microbeads stores issues differently from the reference beads implementation:
-
-- **No SQLite database** - Issues are individual JSON files
-- **Orphan branch** - All issue data lives on the `microbeads` branch
-- **Git worktree** - The orphan branch is checked out at `.git/microbeads-worktree/`
-- **JSON files** - Each issue is `.microbeads/issues/<id>.json`
-- **Sorted keys** - JSON files have alphabetically sorted keys for clean diffs
-- **Merge driver** - Git is configured to auto-merge JSON conflicts
-
-This design means:
-- Issues sync automatically with git pull/push on the orphan branch
-- No database corruption issues
-- Easy to inspect issues directly
-- Works well with multiple agents/collaborators
-
-## Issue Schema
-
-```json
-{
-  "closed_at": null,
-  "closed_reason": null,
-  "created_at": "2025-01-22T10:00:00Z",
-  "dependencies": ["bd-parent1", "bd-parent2"],
-  "description": "Detailed description",
-  "id": "bd-a1b2",
-  "labels": ["backend", "urgent"],
-  "priority": 2,
-  "status": "open",
-  "title": "Issue title",
-  "type": "bug",
-  "updated_at": "2025-01-22T10:00:00Z"
-}
-```
-
-**Status values:** `open`, `in_progress`, `blocked`, `closed`
-
-**Type values:** `bug`, `feature`, `task`, `epic`, `chore`
-
-**Priority values:** `0` (critical) through `4` (low)
-
-## Differences from Reference Beads
-
-| Feature | Reference Beads | Microbeads |
-|---------|----------------|------------|
-| Storage | SQLite + JSONL | JSON files |
-| Sync | Daemon + auto-export | `mb sync` manual |
-| Branch | Configurable | Always `microbeads` orphan |
-| Merge | JSONL conflicts | JSON merge driver |
-| Features | Full (daemon, hooks, federation) | Core only |
-
-Microbeads is intentionally minimal - it provides the essential issue tracking workflow without the complexity of the full beads implementation.
+Priority format: `P0` (critical) through `P4` (low)
