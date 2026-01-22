@@ -38,7 +38,7 @@ class TestGenerateId:
         ts = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         issue_id = generate_id("Test Issue", timestamp=ts)
         assert issue_id.startswith("bd-")
-        assert len(issue_id) == 7  # "bd-" + 4 hex chars
+        assert len(issue_id) == 11  # "bd-" + 8 hex chars
 
     def test_generate_id_custom_prefix(self):
         """Test ID generation with custom prefix."""

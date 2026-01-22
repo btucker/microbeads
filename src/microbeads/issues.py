@@ -31,8 +31,9 @@ def generate_id(title: str, prefix: str = "bd", timestamp: datetime | None = Non
         timestamp = datetime.now(timezone.utc)
 
     # Create a hash from title + timestamp
+    # Use 8 hex chars (4 billion possibilities) to avoid collisions at scale
     data = f"{title}{timestamp.isoformat()}".encode()
-    hash_hex = hashlib.sha256(data).hexdigest()[:4]
+    hash_hex = hashlib.sha256(data).hexdigest()[:8]
 
     return f"{prefix}-{hash_hex}"
 
