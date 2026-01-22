@@ -455,3 +455,134 @@ def build_dependency_tree(
     _cache[full_id] = tree
 
     return tree
+
+
+def _detect_cycle(
+    issue_id: str,
+    all_issues: dict[str, dict[str, Any]],
+    visited: set[str],
+    rec_stack: set[str],
+) -> list[str] | None:
+    """Detect if there's a cycle starting from issue_id. Returns cycle path if found."""
+    visited.add(issue_id)
+    rec_stack.add(issue_id)
+
+    issue = all_issues.get(issue_id)
+    if issue:
+        for dep_id in issue.get("dependencies", []):
+            if dep_id not in visited:
+                cycle = _detect_cycle(dep_id, all_issues, visited, rec_stack)
+                if cycle is not None:
+                    return cycle
+            elif dep_id in rec_stack:
+                # Found a cycle
+                return [issue_id, dep_id]
+
+    rec_stack.discard(issue_id)
+    return None
+
+
+def run_doctor(
+    worktree: Path,
+    fix: bool = False,
+) -> dict[str, Any]:
+    """Run health checks on issues and optionally fix problems.
+
+    Checks for:
+    - Orphaned dependencies (references to non-existent issues)
+    - Stale blocked status (marked blocked but no open blockers)
+    - Dependency cycles
+    - Invalid field values
+
+    Returns a dict with 'problems' list and 'fixed' list.
+    """
+    all_issues = load_all_issues(worktree)
+    problems: list[dict[str, Any]] = []
+    fixed: list[dict[str, Any]] = []
+
+    valid_statuses = {s.value for s in Status}
+    valid_types = {t.value for t in IssueType}
+
+    for issue_id, issue in all_issues.items():
+        issue_problems: list[str] = []
+        issue_fixes: list[str] = []
+
+        # Check for orphaned dependencies
+        orphaned_deps = []
+        for dep_id in issue.get("dependencies", []):
+            if dep_id not in all_issues:
+                orphaned_deps.append(dep_id)
+                issue_problems.append(f"orphaned dependency: {dep_id}")
+
+        if orphaned_deps and fix:
+            current_deps = set(issue.get("dependencies", []))
+            issue["dependencies"] = sorted(current_deps - set(orphaned_deps))
+            issue["updated_at"] = now_iso()
+            save_issue(worktree, issue)
+            issue_fixes.append(f"removed orphaned dependencies: {', '.join(orphaned_deps)}")
+
+        # Check for stale blocked status
+        if issue.get("status") == Status.BLOCKED.value:
+            open_blockers = get_open_blockers(issue, all_issues)
+            if not open_blockers:
+                issue_problems.append("marked blocked but has no open blockers")
+                if fix:
+                    issue["status"] = Status.OPEN.value
+                    issue["updated_at"] = now_iso()
+                    save_issue(worktree, issue)
+                    issue_fixes.append("changed status from blocked to open")
+
+        # Check for invalid status
+        status = issue.get("status")
+        if status and status not in valid_statuses:
+            issue_problems.append(f"invalid status: {status}")
+            if fix:
+                issue["status"] = Status.OPEN.value
+                issue["updated_at"] = now_iso()
+                save_issue(worktree, issue)
+                issue_fixes.append("reset status to open")
+
+        # Check for invalid type
+        issue_type = issue.get("type")
+        if issue_type and issue_type not in valid_types:
+            issue_problems.append(f"invalid type: {issue_type}")
+            if fix:
+                issue["type"] = IssueType.TASK.value
+                issue["updated_at"] = now_iso()
+                save_issue(worktree, issue)
+                issue_fixes.append("reset type to task")
+
+        # Check for invalid priority
+        priority = issue.get("priority")
+        if priority is not None and (not isinstance(priority, int) or priority < 0 or priority > 4):
+            issue_problems.append(f"invalid priority: {priority}")
+            if fix:
+                issue["priority"] = 2
+                issue["updated_at"] = now_iso()
+                save_issue(worktree, issue)
+                issue_fixes.append("reset priority to 2")
+
+        if issue_problems:
+            problems.append({"id": issue_id, "title": issue["title"], "problems": issue_problems})
+        if issue_fixes:
+            fixed.append({"id": issue_id, "fixes": issue_fixes})
+
+    # Check for dependency cycles (separate pass)
+    visited: set[str] = set()
+    for issue_id in all_issues:
+        if issue_id not in visited:
+            cycle = _detect_cycle(issue_id, all_issues, visited, set())
+            if cycle:
+                problems.append(
+                    {
+                        "id": cycle[0],
+                        "title": all_issues[cycle[0]]["title"],
+                        "problems": [f"dependency cycle detected: {cycle[0]} -> {cycle[1]}"],
+                    }
+                )
+
+    return {
+        "problems": problems,
+        "fixed": fixed,
+        "total_issues": len(all_issues),
+    }

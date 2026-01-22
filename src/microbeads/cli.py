@@ -563,6 +563,57 @@ def sync(ctx: Context, message: str | None):
     output(ctx, {"status": "synced"}, "Changes synced.")
 
 
+@main.command()
+@click.option("--fix", is_flag=True, help="Automatically fix problems where possible")
+@pass_context
+def doctor(ctx: Context, fix: bool):
+    """Run health checks on issues and detect problems.
+
+    Checks for:
+    - Orphaned dependencies (references to non-existent issues)
+    - Stale blocked status (marked blocked but no open blockers)
+    - Dependency cycles
+    - Invalid field values (status, type, priority)
+
+    Use --fix to automatically fix problems where possible.
+    Note: Dependency cycles cannot be automatically fixed.
+    """
+    result = issues.run_doctor(ctx.worktree, fix=fix)
+
+    if ctx.json_output:
+        output(ctx, result)
+        return
+
+    total = result["total_issues"]
+    problems = result["problems"]
+    fixed = result["fixed"]
+
+    click.echo(f"Checked {total} issues.")
+
+    if fixed:
+        click.echo(f"\nFixed {len(fixed)} issues:")
+        for item in fixed:
+            for fix_msg in item["fixes"]:
+                click.echo(f"  ✓ {item['id']}: {fix_msg}")
+
+    if problems:
+        # Filter out problems that were fixed
+        fixed_ids = {item["id"] for item in fixed}
+        remaining = [p for p in problems if p["id"] not in fixed_ids or not fix]
+
+        if remaining:
+            click.echo(f"\nFound {len(remaining)} issues with problems:")
+            for item in remaining:
+                click.echo(f"  {item['id']}: {item['title']}")
+                for problem in item["problems"]:
+                    click.echo(f"    - {problem}")
+
+            if not fix:
+                click.echo("\nRun with --fix to automatically fix problems.")
+    else:
+        click.echo("No problems found.")
+
+
 @main.command("merge-driver", hidden=True)
 @click.argument("base_path")
 @click.argument("ours_path")
