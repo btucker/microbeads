@@ -310,10 +310,25 @@ def update_agents_md(repo_root: Path, json_output: bool = False) -> bool:
 
 @main.command()
 @click.option("--import-beads", is_flag=True, help="Import issues from existing beads installation")
+@click.option("--stealth", is_flag=True, help="Local-only mode (issues not pushed to remote)")
+@click.option(
+    "--contributor",
+    "contributor_repo",
+    help="External repo path for contributor mode (keeps planning separate from PRs)",
+)
 @pass_context
-def init(ctx: Context, import_beads: bool):
-    """Initialize microbeads in this repository."""
-    worktree = repo.init(ctx.repo_root)
+def init(ctx: Context, import_beads: bool, stealth: bool, contributor_repo: str | None):
+    """Initialize microbeads in this repository.
+
+    By default, issues are synced to the remote repository.
+
+    Use --stealth for local-only issue tracking (useful for experiments).
+    Use --contributor to route issues to a personal/external repo.
+    """
+    if stealth and contributor_repo:
+        raise click.ClickException("Cannot use both --stealth and --contributor")
+
+    worktree = repo.init(ctx.repo_root, stealth=stealth, contributor_repo=contributor_repo)
 
     imported = 0
     if import_beads:
@@ -332,10 +347,17 @@ def init(ctx: Context, import_beads: bool):
         settings_path = settings_dir / "settings.json"
         _install_claude_hooks(settings_dir, settings_path, "project")
 
+    mode = "stealth" if stealth else ("contributor" if contributor_repo else "normal")
+    mode_msg = ""
+    if stealth:
+        mode_msg = " (stealth mode - local only)"
+    elif contributor_repo:
+        mode_msg = f" (contributor mode - using {contributor_repo})"
+
     output(
         ctx,
-        {"status": "initialized", "worktree": str(worktree), "imported": imported},
-        f"Microbeads initialized. Issues stored on orphan branch '{repo.BRANCH_NAME}'.",
+        {"status": "initialized", "worktree": str(worktree), "imported": imported, "mode": mode},
+        f"Microbeads initialized{mode_msg}. Issues stored on orphan branch '{repo.BRANCH_NAME}'.",
     )
 
 
