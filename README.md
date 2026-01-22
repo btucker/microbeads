@@ -130,7 +130,7 @@ Add `--json` for machine-readable output:
 
 ```bash
 mb --json list
-mb --json show bd-abc
+mb --json show mi-abc
 mb --json ready
 ```
 
@@ -143,16 +143,21 @@ Unlike beads (SQLite + JSONL), microbeads stores each issue as a separate JSON f
 └── .microbeads/
     ├── metadata.json
     └── issues/
-        ├── bd-a1b2.json
-        ├── bd-c3d4.json
-        └── ...
+        ├── active/
+        │   ├── mi-a1b2.json
+        │   └── mi-c3d4.json
+        └── closed/
+            └── mi-e5f6.json
 ```
+
+Active issues (open, in_progress, blocked) are stored separately from closed issues for faster loading—most operations only need active issues.
 
 Benefits:
 - **No database** - Just JSON files, easy to inspect and debug
 - **Git-native** - Issues sync with normal git operations
 - **Merge-friendly** - Custom merge driver handles conflicts automatically
 - **Multi-agent safe** - Multiple agents can work on different issues
+- **Fast loading** - Only loads closed issues when explicitly requested
 
 The `microbeads` orphan branch keeps issue data completely separate from your code.
 
