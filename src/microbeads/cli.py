@@ -489,9 +489,11 @@ def setup_claude(project: bool, remove: bool):
     the AI agent of the microbeads workflow.
     """
     # Determine settings path
+    # Project settings.json = shared (committed)
+    # Global settings.json = user-wide
     if project:
         settings_dir = Path.cwd() / ".claude"
-        settings_path = settings_dir / "settings.local.json"
+        settings_path = settings_dir / "settings.json"
         scope = "project"
     else:
         home = Path.home()
