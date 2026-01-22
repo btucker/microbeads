@@ -273,7 +273,7 @@ See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
 | Branch | Configurable | Always `microbeads` orphan |
 | Merge | JSONL conflicts | JSON merge driver |
 | Doctor | `bd doctor` | `mb doctor` |
-| Compaction | `bd compact` | `mb compact` |
+| Compaction | Yes | Yes |
 | History | Full tracking | Full tracking |
 | Hooks | Git hooks | Claude Code hooks |
 | Modes | Stealth, contributor | Stealth, contributor |
