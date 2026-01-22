@@ -1,0 +1,4 @@
+[submodule "reference-implementations/beads"]
+  depth = 1
+	path = reference-implementations/beads
+	url = https://github.com/steveyegge/beads.git
