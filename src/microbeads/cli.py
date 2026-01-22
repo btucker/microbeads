@@ -33,7 +33,6 @@ Run `{cmd} ready` to check for existing issues first.
 {cmd} dep add <child> <parent>      # Add dependency
 {cmd} sync                          # Save to git
 {cmd} doctor                        # Check for problems
-{cmd} compact                       # Compress old closed issues
 ```
 
 ## Status: open | in_progress | blocked | closed
@@ -134,10 +133,6 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
         lines.append(f"Closed:      {issue['closed_at']}")
         if issue.get("closed_reason"):
             lines.append(f"Reason:      {issue['closed_reason']}")
-
-    # Show if compacted
-    if issue.get("compacted"):
-        lines.append("(compacted)")
 
     # Show history if present
     history = issue.get("history", [])
@@ -645,43 +640,6 @@ def sync(ctx: Context, message: str | None):
 
 
 @main.command()
-@click.option(
-    "--days",
-    default=7,
-    type=int,
-    help="Only compact issues closed more than N days ago (default: 7)",
-)
-@pass_context
-def compact(ctx: Context, days: int):
-    """Compact closed issues to reduce memory usage.
-
-    Removes verbose fields (description, dependencies, labels) from closed
-    issues older than the specified number of days, keeping only essential
-    information like ID, title, status, and close reason.
-
-    This helps AI agents manage context window limits during long sessions.
-    """
-    result = issues.compact_closed_issues(ctx.worktree, older_than_days=days)
-
-    if ctx.json_output:
-        output(ctx, result)
-        return
-
-    compacted = result["compacted"]
-    skipped = result["skipped"]
-
-    if compacted:
-        click.echo(f"Compacted {len(compacted)} issues:")
-        for item in compacted:
-            click.echo(f"  ● {item['id']}: {item['title']}")
-    else:
-        click.echo("No issues to compact.")
-
-    if skipped:
-        click.echo(f"Skipped {skipped} issues (already compacted or too recent).")
-
-
-@main.command()
 @click.option("--fix", is_flag=True, help="Automatically fix problems where possible")
 @pass_context
 def doctor(ctx: Context, fix: bool):
@@ -747,8 +705,8 @@ def merge_driver(base_path: str, ours_path: str, theirs_path: str):
 def prime():
     """Output workflow context for AI agents.
 
-    Designed for Claude Code hooks (SessionStart, PreCompact) to remind
-    agents of the microbeads workflow after context compaction.
+    Designed for Claude Code hooks (SessionStart) to remind
+    agents of the microbeads workflow.
 
     Auto-initializes microbeads if not already initialized, and syncs
     to pull any remote changes.
@@ -791,7 +749,7 @@ def setup():
 def setup_claude(global_: bool, remove: bool):
     """Install Claude Code hooks for microbeads.
 
-    Adds SessionStart and PreCompact hooks that run 'mb prime' which:
+    Adds SessionStart hook that runs 'mb prime' which:
     - Auto-initializes microbeads if not already set up
     - Syncs to pull any remote changes
     - Outputs workflow context for the AI agent
@@ -836,12 +794,12 @@ def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -
     # Get or create hooks section
     hooks = settings.setdefault("hooks", {})
 
-    # Add microbeads prime to SessionStart and PreCompact
+    # Add microbeads prime to SessionStart
     # Use get_command_name() to detect if mb is available
     command = f"{get_command_name()} prime"
     hook_entry = {"matcher": "", "hooks": [{"type": "command", "command": command}]}
 
-    for event in ["SessionStart", "PreCompact"]:
+    for event in ["SessionStart"]:
         event_hooks = hooks.get(event, [])
         if not isinstance(event_hooks, list):
             event_hooks = []
@@ -887,7 +845,7 @@ def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
     # Check for both old and new command formats
     commands_to_remove = ["uvx microbeads prime", "mb prime"]
 
-    for event in ["SessionStart", "PreCompact"]:
+    for event in ["SessionStart"]:
         event_hooks = hooks.get(event, [])
         if not isinstance(event_hooks, list):
             continue
