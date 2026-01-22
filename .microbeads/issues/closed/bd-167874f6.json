@@ -1,0 +1,14 @@
+{
+  "closed_at": "2026-01-22T10:18:21Z",
+  "closed_reason": "Added TDD section to AGENTS.md",
+  "created_at": "2026-01-22T10:17:45Z",
+  "dependencies": [],
+  "description": "",
+  "id": "bd-167874f6",
+  "labels": [],
+  "priority": 2,
+  "status": "closed",
+  "title": "Add TDD guidance to AGENTS.md",
+  "type": "chore",
+  "updated_at": "2026-01-22T10:18:21Z"
+}
