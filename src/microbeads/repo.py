@@ -199,7 +199,7 @@ def ensure_worktree(repo_root: Path) -> Path:
     return worktree
 
 
-def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> None:
+def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> list[str]:
     """Fetch and merge any existing microbeads branches to stay in sync.
 
     Looks for:
@@ -207,6 +207,7 @@ def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> Non
     2. origin/claude/microbeads-* (session branches from other sessions)
 
     Merges them into the local microbeads branch so all sessions share state.
+    Returns list of stale branches that were merged (candidates for cleanup).
     """
     # Fetch all remote refs
     run_git("fetch", "origin", cwd=worktree, check=False)
@@ -214,7 +215,7 @@ def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> Non
     # Get list of remote microbeads branches
     result = run_git("ls-remote", "--heads", "origin", cwd=worktree, check=False)
     if result.returncode != 0:
-        return
+        return []
 
     remote_branches = []
     for line in result.stdout.strip().split("\n"):
@@ -228,18 +229,35 @@ def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> Non
 
     # Merge each remote branch (skip our own session)
     our_branch = f"claude/{BRANCH_NAME}-{current_session_id}"
+    merged_branches = []
     for branch in remote_branches:
         if branch == our_branch:
             continue  # Skip our own session branch
+        if branch == BRANCH_NAME:
+            continue  # Don't delete canonical branch
 
         # Try to merge (allow conflicts to be auto-resolved by merge driver)
         result = run_git(
             "pull", "--no-edit", "origin", branch,
             cwd=worktree, check=False
         )
-        # If merge fails, try rebase approach
-        if result.returncode != 0 and "CONFLICT" not in result.stdout:
+        if result.returncode == 0:
+            merged_branches.append(branch)
+        elif "CONFLICT" not in result.stdout:
             run_git("merge", "--abort", cwd=worktree, check=False)
+
+    return merged_branches
+
+
+def _cleanup_stale_branches(worktree: Path, branches: list[str]) -> None:
+    """Delete stale remote branches that have been merged."""
+    for branch in branches:
+        # Delete remote branch
+        result = run_git(
+            "push", "origin", "--delete", branch,
+            cwd=worktree, check=False
+        )
+        # Ignore errors (might not have permission, branch might be gone, etc.)
 
 
 def sync(repo_root: Path, message: str | None = None) -> None:
@@ -270,11 +288,13 @@ def sync(repo_root: Path, message: str | None = None) -> None:
             push_target = f"claude/{BRANCH_NAME}-{session_id}"
 
     # Fetch and merge any existing microbeads branches to stay in sync
+    stale_branches = []
     if session_id:
-        _sync_from_remote_microbeads(worktree, session_id)
+        stale_branches = _sync_from_remote_microbeads(worktree, session_id)
 
     # Push (try to push, don't fail if remote doesn't exist or permission denied)
     result = run_git("push", "-u", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree, check=False)
+    push_succeeded = False
     if result.returncode != 0:
         # Check if it's because remote doesn't exist or permission issue
         if "does not appear to be a git repository" in result.stderr:
@@ -282,7 +302,14 @@ def sync(repo_root: Path, message: str | None = None) -> None:
         elif "has no upstream branch" in result.stderr:
             # First push, set upstream
             run_git("push", "--set-upstream", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree)
+            push_succeeded = True
         elif "403" in result.stderr or "Permission denied" in result.stderr:
             pass  # Permission issue, skip push silently
         else:
             raise RuntimeError(f"Push failed: {result.stderr}")
+    else:
+        push_succeeded = True
+
+    # Clean up stale branches after successful push
+    if push_succeeded and stale_branches:
+        _cleanup_stale_branches(worktree, stale_branches)
