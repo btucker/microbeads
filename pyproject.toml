@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "microbeads"
+version = "0.1.0"
+description = "A simplified git-backed issue tracker for AI agents"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+]
+
+[project.scripts]
+mb = "microbeads.cli:main"
+microbeads = "microbeads.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/microbeads"]
