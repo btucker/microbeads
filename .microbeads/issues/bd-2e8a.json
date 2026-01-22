@@ -1,6 +1,6 @@
 {
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-22T10:34:24Z",
+  "closed_reason": "Explored alternatives: (1) Git Notes - attached to commits, complex to query, merge conflicts, not transferred by default. (2) Git Trailers - immutable once committed, tied to specific commits. Neither suits issue tracking which needs mutable, commit-independent issues with efficient querying. Current JSON-on-orphan-branch approach is well-suited: flexible, easy to inspect/query, independent of main branch. Recommend keeping current design.",
   "created_at": "2026-01-22T05:07:34Z",
   "dependencies": [],
   "description": "",
@@ -9,8 +9,8 @@
     "research"
   ],
   "priority": 3,
-  "status": "open",
+  "status": "closed",
   "title": "Explore git notes/trailers as alternative storage",
   "type": "feature",
-  "updated_at": "2026-01-22T05:07:34Z"
+  "updated_at": "2026-01-22T10:34:24Z"
 }
