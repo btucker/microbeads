@@ -199,6 +199,49 @@ def ensure_worktree(repo_root: Path) -> Path:
     return worktree
 
 
+def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> None:
+    """Fetch and merge any existing microbeads branches to stay in sync.
+
+    Looks for:
+    1. origin/microbeads (canonical branch)
+    2. origin/claude/microbeads-* (session branches from other sessions)
+
+    Merges them into the local microbeads branch so all sessions share state.
+    """
+    # Fetch all remote refs
+    run_git("fetch", "origin", cwd=worktree, check=False)
+
+    # Get list of remote microbeads branches
+    result = run_git("ls-remote", "--heads", "origin", cwd=worktree, check=False)
+    if result.returncode != 0:
+        return
+
+    remote_branches = []
+    for line in result.stdout.strip().split("\n"):
+        if not line:
+            continue
+        _, ref = line.split("\t", 1)
+        branch = ref.replace("refs/heads/", "")
+        # Look for microbeads or claude/microbeads-* branches
+        if branch == BRANCH_NAME or branch.startswith(f"claude/{BRANCH_NAME}-"):
+            remote_branches.append(branch)
+
+    # Merge each remote branch (skip our own session)
+    our_branch = f"claude/{BRANCH_NAME}-{current_session_id}"
+    for branch in remote_branches:
+        if branch == our_branch:
+            continue  # Skip our own session branch
+
+        # Try to merge (allow conflicts to be auto-resolved by merge driver)
+        result = run_git(
+            "pull", "--no-edit", "origin", branch,
+            cwd=worktree, check=False
+        )
+        # If merge fails, try rebase approach
+        if result.returncode != 0 and "CONFLICT" not in result.stdout:
+            run_git("merge", "--abort", cwd=worktree, check=False)
+
+
 def sync(repo_root: Path, message: str | None = None) -> None:
     """Commit and push changes to the microbeads branch."""
     worktree = ensure_worktree(repo_root)
@@ -217,6 +260,7 @@ def sync(repo_root: Path, message: str | None = None) -> None:
 
     # Determine push target - detect Claude Code web environment
     push_target = BRANCH_NAME
+    session_id = None
     current = run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=repo_root, check=False)
     if current.returncode == 0:
         branch = current.stdout.strip()
@@ -224,6 +268,10 @@ def sync(repo_root: Path, message: str | None = None) -> None:
         if branch.startswith("claude/") and "-" in branch:
             session_id = branch.rsplit("-", 1)[-1]
             push_target = f"claude/{BRANCH_NAME}-{session_id}"
+
+    # Fetch and merge any existing microbeads branches to stay in sync
+    if session_id:
+        _sync_from_remote_microbeads(worktree, session_id)
 
     # Push (try to push, don't fail if remote doesn't exist or permission denied)
     result = run_git("push", "-u", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree, check=False)
