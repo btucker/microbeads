@@ -1,0 +1,31 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T16:35:28Z",
+  "closed_reason": "Removed compaction feature and anthropic dependency",
+  "created_at": "2026-01-22T16:29:44Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T16:29:55Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-22T16:35:28Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-7a41afc6",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "closed",
+  "title": "Remove compaction support",
+  "type": "chore",
+  "updated_at": "2026-01-22T16:35:28Z"
+}

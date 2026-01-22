@@ -1,0 +1,25 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T12:45:09Z",
+  "closed_reason": "Fixed docstring and updated metadata to use mi prefix",
+  "created_at": "2026-01-22T12:41:49Z",
+  "dependencies": [],
+  "description": "1) Repo metadata has id_prefix='bd' but should be 'mi' for microbeads. 2) docstring in derive_prefix incorrectly says microbeads -> mb (should be mi)",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T12:45:09Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "bd-5ad0bdcb",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "closed",
+  "title": "Fix metadata prefix and docstring",
+  "type": "bug",
+  "updated_at": "2026-01-22T12:45:09Z"
+}

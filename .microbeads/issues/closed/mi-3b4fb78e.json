@@ -1,0 +1,25 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T12:45:09Z",
+  "closed_reason": "Test successful - prefix working",
+  "created_at": "2026-01-22T12:44:58Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T12:45:09Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "mi-3b4fb78e",
+  "labels": [],
+  "notes": "",
+  "priority": 3,
+  "status": "closed",
+  "title": "Test new prefix",
+  "type": "chore",
+  "updated_at": "2026-01-22T12:45:09Z"
+}

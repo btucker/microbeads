@@ -1,0 +1,11 @@
+{
+  "closed_at": "2026-01-22T10:14:45Z",
+  "closed_reason": "Added branch strategy documentation to README",
+  "compacted": true,
+  "id": "bd-4a5890d9",
+  "label_count": 1,
+  "priority": 2,
+  "status": "closed",
+  "title": "Document branch usage and Claude Code web workaround in README",
+  "type": "chore"
+}

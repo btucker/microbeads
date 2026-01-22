@@ -1,0 +1,22 @@
+{
+  "closed_at": "2026-01-22T11:32:44Z",
+  "closed_reason": "Implemented --contributor flag for external repo mode",
+  "created_at": "2026-01-22T11:17:41Z",
+  "dependencies": [],
+  "description": "Implement contributor mode for mb init that routes issue tracking to an external/personal repo.",
+  "history": [
+    {
+      "at": "2026-01-22T11:32:44Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "bd-a3dd3583",
+  "labels": [],
+  "priority": 3,
+  "status": "closed",
+  "title": "Add contributor mode (--contributor)",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:32:44Z"
+}

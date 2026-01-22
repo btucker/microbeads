@@ -1,0 +1,14 @@
+{
+  "closed_at": "2026-01-22T11:22:36Z",
+  "closed_reason": "Implemented design, notes, acceptance_criteria fields",
+  "created_at": "2026-01-22T11:17:39Z",
+  "dependencies": [],
+  "description": "Add support for more structured issue fields.",
+  "id": "bd-5e2dee45",
+  "labels": [],
+  "priority": 3,
+  "status": "closed",
+  "title": "Add additional issue fields: design, notes, acceptance_criteria",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:22:36Z"
+}

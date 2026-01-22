@@ -1,0 +1,25 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T12:36:56Z",
+  "closed_reason": "Added 7 disk cache tests",
+  "created_at": "2026-01-22T12:33:03Z",
+  "dependencies": [],
+  "description": "Need tests for: cache creation, cache hit, cache invalidation on file modification, cache invalidation on file deletion",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T12:36:56Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "bd-37feac7c",
+  "labels": [],
+  "notes": "",
+  "priority": 1,
+  "status": "closed",
+  "title": "Add tests for disk cache functionality",
+  "type": "task",
+  "updated_at": "2026-01-22T12:36:56Z"
+}

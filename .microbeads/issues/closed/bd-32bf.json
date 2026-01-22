@@ -1,0 +1,13 @@
+{
+  "closed_at": "2026-01-22T07:10:38Z",
+  "closed_reason": "Added E2E tests for partial ID matching",
+  "compacted": true,
+  "dependency_count": 1,
+  "id": "bd-32bf",
+  "label_count": 1,
+  "priority": 2,
+  "status": "closed",
+  "summary": "Test exact match, prefix match, contains match, ambiguous matches error, no matches returns None.",
+  "title": "E2E test: partial ID matching",
+  "type": "task"
+}

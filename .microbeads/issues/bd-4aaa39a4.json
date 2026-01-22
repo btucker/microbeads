@@ -1,0 +1,14 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T11:09:42Z",
+  "dependencies": [],
+  "description": "Add support for more structured issue fields from beads: design (design notes/approach), notes (general notes), and acceptance_criteria (definition of done). Update create, update, and show commands to support these fields.",
+  "id": "bd-4aaa39a4",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Add additional issue fields: design, notes, acceptance_criteria",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:09:42Z"
+}

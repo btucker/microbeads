@@ -1,0 +1,14 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T11:09:50Z",
+  "dependencies": [],
+  "description": "Track modification history for issues and display it in mb show output. Record changes to status, priority, title, description, and other fields with timestamps.",
+  "id": "bd-29de7a77",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Add issue history tracking",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:09:50Z"
+}

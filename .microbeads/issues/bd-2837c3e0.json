@@ -1,0 +1,14 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T11:10:34Z",
+  "dependencies": [],
+  "description": "Implement contributor mode for mb init that routes issue tracking to an external/personal repo, keeping experimental planning separate from pull requests. Allows contributors to plan without cluttering the main project.",
+  "id": "bd-2837c3e0",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Add contributor mode (--contributor)",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:10:34Z"
+}

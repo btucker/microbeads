@@ -1,0 +1,12 @@
+{
+  "closed_at": "2026-01-22T07:04:23Z",
+  "closed_reason": "Added pytest, ruff, and GitHub Actions CI with 67 tests",
+  "compacted": true,
+  "id": "bd-7d7a",
+  "label_count": 1,
+  "priority": 1,
+  "status": "closed",
+  "summary": "Add pytest to dev dependencies, create tests/ directory, conftest.py with temp git repo fixtures",
+  "title": "Add pytest test infrastructure",
+  "type": "task"
+}
