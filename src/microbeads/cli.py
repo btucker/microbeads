@@ -480,26 +480,29 @@ def setup():
 
 
 @setup.command("claude")
-@click.option("--project", is_flag=True, help="Install for this project only (default: global)")
+@click.option("--global", "global_", is_flag=True, help="Install globally for all projects")
 @click.option("--remove", is_flag=True, help="Remove hooks instead of installing")
-def setup_claude(project: bool, remove: bool):
+def setup_claude(global_: bool, remove: bool):
     """Install Claude Code hooks for microbeads.
 
     Adds SessionStart and PreCompact hooks that run 'mb prime' to remind
     the AI agent of the microbeads workflow.
+
+    By default, installs for the current project (.claude/settings.json).
+    Use --global to install for all projects (~/.claude/settings.json).
     """
     # Determine settings path
-    # Project settings.json = shared (committed)
+    # Project settings.json = shared (committed) - DEFAULT
     # Global settings.json = user-wide
-    if project:
-        settings_dir = Path.cwd() / ".claude"
-        settings_path = settings_dir / "settings.json"
-        scope = "project"
-    else:
+    if global_:
         home = Path.home()
         settings_dir = home / ".claude"
         settings_path = settings_dir / "settings.json"
         scope = "global"
+    else:
+        settings_dir = Path.cwd() / ".claude"
+        settings_path = settings_dir / "settings.json"
+        scope = "project"
 
     if remove:
         _remove_claude_hooks(settings_path, scope)

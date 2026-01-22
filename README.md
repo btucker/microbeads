@@ -139,11 +139,11 @@ The `microbeads` orphan branch keeps issue data completely separate from your co
 Install hooks so Claude Code automatically loads workflow context:
 
 ```bash
-# Install globally (all projects)
+# Install for this project (default)
 mb setup claude
 
-# Or for this project only
-mb setup claude --project
+# Or install globally (all projects)
+mb setup claude --global
 
 # Remove hooks
 mb setup claude --remove
