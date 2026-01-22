@@ -1394,26 +1394,6 @@ class TestDoctorCommand:
         assert result.returncode == 0
 
 
-class TestCompactCommand:
-    """E2E tests for the compact command."""
-
-    def test_compact_no_closed_issues(self, e2e_repo: Path):
-        """Test compact with no closed issues."""
-        run_mb("init", cwd=e2e_repo)
-        run_mb("create", "Open Issue", cwd=e2e_repo)
-
-        result = run_mb("compact", cwd=e2e_repo)
-        assert result.returncode == 0
-        assert "0" in result.stdout or "No issues" in result.stdout
-
-    def test_compact_with_days_option(self, e2e_repo: Path):
-        """Test compact with --days option."""
-        run_mb("init", cwd=e2e_repo)
-
-        result = run_mb("compact", "--days", "30", cwd=e2e_repo)
-        assert result.returncode == 0
-
-
 class TestHooksCommand:
     """E2E tests for the hooks install/remove commands."""
 

@@ -120,8 +120,6 @@ mb sync    # Commit and push to orphan branch
 ```bash
 mb doctor              # Check for issues (orphan deps, cycles, missing files)
 mb doctor --fix        # Auto-fix problems where possible
-mb compact             # Summarize old closed issues (uses LLM if ANTHROPIC_API_KEY set)
-mb compact --days 30   # Only compact issues closed >30 days ago (default: 7)
 ```
 
 ### JSON Output
@@ -255,7 +253,7 @@ mb hooks remove
 mb hooks remove --global
 ```
 
-This adds `SessionStart` and `PreCompact` hooks that run `mb prime` to remind the AI agent of the microbeads workflow.
+This adds a `SessionStart` hook that runs `mb prime` to remind the AI agent of the microbeads workflow.
 
 ## For AI Agents
 
@@ -273,7 +271,6 @@ See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
 | Branch | Configurable | Always `microbeads` orphan |
 | Merge | JSONL conflicts | JSON merge driver |
 | Doctor | `bd doctor` | `mb doctor` |
-| Compaction | Yes | Yes |
 | History | Full tracking | Full tracking |
 | Hooks | Git hooks | Claude Code hooks |
 | Modes | Stealth, contributor | Stealth, contributor |
