@@ -9,25 +9,57 @@ from typing import Any
 
 from . import repo
 
-# In-memory cache for loaded issues, keyed by issues directory path
-_issues_cache: dict[str, dict[str, dict[str, Any]]] = {}
+# In-memory caches for loaded issues, keyed by directory path
+_active_cache: dict[str, dict[str, dict[str, Any]]] = {}
+_closed_cache: dict[str, dict[str, dict[str, Any]]] = {}
 
 
-def _get_cache_key(worktree: Path) -> str:
-    """Get the cache key for a worktree."""
-    return str(repo.get_issues_path(worktree))
+def _get_active_cache_key(worktree: Path) -> str:
+    """Get the cache key for active issues."""
+    return str(repo.get_active_issues_path(worktree))
 
 
-def _get_cache(worktree: Path) -> dict[str, dict[str, Any]] | None:
-    """Get cached issues for a worktree, or None if not cached."""
-    return _issues_cache.get(_get_cache_key(worktree))
+def _get_closed_cache_key(worktree: Path) -> str:
+    """Get the cache key for closed issues."""
+    return str(repo.get_closed_issues_path(worktree))
 
 
-def _update_cache(worktree: Path, issue: dict[str, Any]) -> None:
-    """Update a single issue in the cache."""
-    cache = _get_cache(worktree)
+def _get_active_cache(worktree: Path) -> dict[str, dict[str, Any]] | None:
+    """Get cached active issues for a worktree, or None if not cached."""
+    return _active_cache.get(_get_active_cache_key(worktree))
+
+
+def _get_closed_cache(worktree: Path) -> dict[str, dict[str, Any]] | None:
+    """Get cached closed issues for a worktree, or None if not cached."""
+    return _closed_cache.get(_get_closed_cache_key(worktree))
+
+
+def _update_active_cache(worktree: Path, issue: dict[str, Any]) -> None:
+    """Update a single issue in the active cache."""
+    cache = _get_active_cache(worktree)
     if cache is not None:
         cache[issue["id"]] = issue
+
+
+def _update_closed_cache(worktree: Path, issue: dict[str, Any]) -> None:
+    """Update a single issue in the closed cache."""
+    cache = _get_closed_cache(worktree)
+    if cache is not None:
+        cache[issue["id"]] = issue
+
+
+def _remove_from_active_cache(worktree: Path, issue_id: str) -> None:
+    """Remove an issue from the active cache."""
+    cache = _get_active_cache(worktree)
+    if cache is not None:
+        cache.pop(issue_id, None)
+
+
+def _remove_from_closed_cache(worktree: Path, issue_id: str) -> None:
+    """Remove an issue from the closed cache."""
+    cache = _get_closed_cache(worktree)
+    if cache is not None:
+        cache.pop(issue_id, None)
 
 
 def clear_cache(worktree: Path | None = None) -> None:
@@ -37,11 +69,13 @@ def clear_cache(worktree: Path | None = None) -> None:
         worktree: If provided, clear cache only for this worktree.
                   If None, clear all caches.
     """
-    global _issues_cache
+    global _active_cache, _closed_cache
     if worktree is None:
-        _issues_cache = {}
+        _active_cache = {}
+        _closed_cache = {}
     else:
-        _issues_cache.pop(_get_cache_key(worktree), None)
+        _active_cache.pop(_get_active_cache_key(worktree), None)
+        _closed_cache.pop(_get_closed_cache_key(worktree), None)
 
 
 class IssueType(str, Enum):
@@ -117,48 +151,79 @@ def load_issue(path: Path) -> dict[str, Any]:
 
 
 def save_issue(worktree: Path, issue: dict[str, Any]) -> Path:
-    """Save an issue to a JSON file and update cache."""
-    issues_dir = repo.get_issues_path(worktree)
+    """Save an issue to a JSON file in the appropriate directory and update cache."""
+    is_closed = issue.get("status") == Status.CLOSED.value
+
+    if is_closed:
+        issues_dir = repo.get_closed_issues_path(worktree)
+    else:
+        issues_dir = repo.get_active_issues_path(worktree)
+
     issues_dir.mkdir(parents=True, exist_ok=True)
 
     path = issues_dir / f"{issue['id']}.json"
     path.write_text(issue_to_json(issue))
 
-    # Update cache if it exists
-    _update_cache(worktree, issue)
+    # Update appropriate cache
+    if is_closed:
+        _update_closed_cache(worktree, issue)
+    else:
+        _update_active_cache(worktree, issue)
 
     return path
 
 
 def get_issue(worktree: Path, issue_id: str) -> dict[str, Any] | None:
-    """Get an issue by ID."""
-    issues_dir = repo.get_issues_path(worktree)
-    path = issues_dir / f"{issue_id}.json"
+    """Get an issue by ID, checking active first then closed."""
+    active_dir = repo.get_active_issues_path(worktree)
+    closed_dir = repo.get_closed_issues_path(worktree)
 
+    # Check active first (most common case)
+    path = active_dir / f"{issue_id}.json"
     if path.exists():
         return load_issue(path)
 
-    # Try partial match
-    for p in issues_dir.glob("*.json"):
-        if p.stem.startswith(issue_id) or issue_id in p.stem:
-            return load_issue(p)
+    # Check closed
+    path = closed_dir / f"{issue_id}.json"
+    if path.exists():
+        return load_issue(path)
+
+    # Try partial match in active
+    if active_dir.exists():
+        for p in active_dir.glob("*.json"):
+            if p.stem.startswith(issue_id) or issue_id in p.stem:
+                return load_issue(p)
+
+    # Try partial match in closed
+    if closed_dir.exists():
+        for p in closed_dir.glob("*.json"):
+            if p.stem.startswith(issue_id) or issue_id in p.stem:
+                return load_issue(p)
 
     return None
 
 
 def resolve_issue_id(worktree: Path, issue_id: str) -> str | None:
-    """Resolve a partial issue ID to a full ID."""
-    issues_dir = repo.get_issues_path(worktree)
-    path = issues_dir / f"{issue_id}.json"
+    """Resolve a partial issue ID to a full ID, checking both active and closed."""
+    active_dir = repo.get_active_issues_path(worktree)
+    closed_dir = repo.get_closed_issues_path(worktree)
 
-    if path.exists():
+    # Check exact match in active
+    if (active_dir / f"{issue_id}.json").exists():
         return issue_id
 
-    # Try partial match
+    # Check exact match in closed
+    if (closed_dir / f"{issue_id}.json").exists():
+        return issue_id
+
+    # Try partial match in both directories
     matches = []
-    for p in issues_dir.glob("*.json"):
-        if p.stem.startswith(issue_id) or issue_id in p.stem:
-            matches.append(p.stem)
+    for issues_dir in [active_dir, closed_dir]:
+        if issues_dir.exists():
+            for p in issues_dir.glob("*.json"):
+                if p.stem.startswith(issue_id) or issue_id in p.stem:
+                    if p.stem not in matches:  # Avoid duplicates
+                        matches.append(p.stem)
 
     if len(matches) == 1:
         return matches[0]
@@ -168,20 +233,43 @@ def resolve_issue_id(worktree: Path, issue_id: str) -> str | None:
     return None
 
 
-def load_all_issues(worktree: Path) -> dict[str, dict[str, Any]]:
-    """Load all issues into a dict keyed by ID. Uses caching for performance."""
-    issues_dir = repo.get_issues_path(worktree)
+def load_active_issues(worktree: Path) -> dict[str, dict[str, Any]]:
+    """Load active issues (open, in_progress, blocked) into a dict keyed by ID."""
+    issues_dir = repo.get_active_issues_path(worktree)
 
     if not issues_dir.exists():
         return {}
 
-    cache_key = _get_cache_key(worktree)
-    if cache_key in _issues_cache:
-        return _issues_cache[cache_key]
+    cache_key = _get_active_cache_key(worktree)
+    if cache_key in _active_cache:
+        return _active_cache[cache_key]
 
     issues = {path.stem: load_issue(path) for path in issues_dir.glob("*.json")}
-    _issues_cache[cache_key] = issues
+    _active_cache[cache_key] = issues
     return issues
+
+
+def load_closed_issues(worktree: Path) -> dict[str, dict[str, Any]]:
+    """Load closed issues into a dict keyed by ID."""
+    issues_dir = repo.get_closed_issues_path(worktree)
+
+    if not issues_dir.exists():
+        return {}
+
+    cache_key = _get_closed_cache_key(worktree)
+    if cache_key in _closed_cache:
+        return _closed_cache[cache_key]
+
+    issues = {path.stem: load_issue(path) for path in issues_dir.glob("*.json")}
+    _closed_cache[cache_key] = issues
+    return issues
+
+
+def load_all_issues(worktree: Path) -> dict[str, dict[str, Any]]:
+    """Load all issues (active + closed) into a dict keyed by ID."""
+    active = load_active_issues(worktree)
+    closed = load_closed_issues(worktree)
+    return {**active, **closed}
 
 
 def list_issues(
@@ -192,8 +280,21 @@ def list_issues(
     issue_type: IssueType | None = None,
     _cache: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """List issues with optional filtering."""
-    all_issues = _cache if _cache is not None else load_all_issues(worktree)
+    """List issues with optional filtering.
+
+    Performance optimization: Only loads closed issues when status=closed is requested.
+    """
+    if _cache is not None:
+        all_issues = _cache
+    elif status == Status.CLOSED:
+        # Only load closed issues when explicitly requested
+        all_issues = load_closed_issues(worktree)
+    elif status is not None:
+        # Specific non-closed status: only load active issues
+        all_issues = load_active_issues(worktree)
+    else:
+        # No status filter: load all issues
+        all_issues = load_all_issues(worktree)
 
     issues = []
     for issue in all_issues.values():
@@ -259,7 +360,7 @@ def update_issue(
 
 
 def close_issue(worktree: Path, issue_id: str, reason: str = "") -> dict[str, Any]:
-    """Close an issue."""
+    """Close an issue and move it to the closed directory."""
     full_id = resolve_issue_id(worktree, issue_id)
     if full_id is None:
         raise ValueError(f"Issue not found: {issue_id}")
@@ -267,18 +368,25 @@ def close_issue(worktree: Path, issue_id: str, reason: str = "") -> dict[str, An
     issue = get_issue(worktree, full_id)
     if issue is None:
         raise ValueError(f"Issue not found: {issue_id}")
+
+    # Remove from active directory if it exists there
+    active_path = repo.get_active_issues_path(worktree) / f"{full_id}.json"
+    if active_path.exists():
+        active_path.unlink()
+        _remove_from_active_cache(worktree, full_id)
 
     issue["status"] = Status.CLOSED.value
     issue["closed_at"] = now_iso()
     issue["closed_reason"] = reason
     issue["updated_at"] = now_iso()
 
+    # save_issue will save to closed directory since status is closed
     save_issue(worktree, issue)
     return issue
 
 
 def reopen_issue(worktree: Path, issue_id: str) -> dict[str, Any]:
-    """Reopen a closed issue."""
+    """Reopen a closed issue and move it to the active directory."""
     full_id = resolve_issue_id(worktree, issue_id)
     if full_id is None:
         raise ValueError(f"Issue not found: {issue_id}")
@@ -287,11 +395,18 @@ def reopen_issue(worktree: Path, issue_id: str) -> dict[str, Any]:
     if issue is None:
         raise ValueError(f"Issue not found: {issue_id}")
 
+    # Remove from closed directory if it exists there
+    closed_path = repo.get_closed_issues_path(worktree) / f"{full_id}.json"
+    if closed_path.exists():
+        closed_path.unlink()
+        _remove_from_closed_cache(worktree, full_id)
+
     issue["status"] = Status.OPEN.value
     issue["closed_at"] = None
     issue["closed_reason"] = None
     issue["updated_at"] = now_iso()
 
+    # save_issue will save to active directory since status is open
     save_issue(worktree, issue)
     return issue
 
@@ -346,26 +461,44 @@ def remove_dependency(worktree: Path, child_id: str, parent_id: str) -> dict[str
     return child
 
 
+def is_issue_closed(worktree: Path, issue_id: str) -> bool:
+    """Check if an issue is closed by checking the closed directory.
+
+    This is an optimization to avoid loading all closed issues just to check status.
+    """
+    closed_path = repo.get_closed_issues_path(worktree) / f"{issue_id}.json"
+    return closed_path.exists()
+
+
 def get_open_blockers(
     issue: dict[str, Any],
-    cache: dict[str, dict[str, Any]],
+    active_cache: dict[str, dict[str, Any]],
+    worktree: Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Get all open/in_progress issues that block this issue."""
+    """Get all open/in_progress issues that block this issue.
+
+    Uses active_cache for active issues. If a dependency is not in active_cache,
+    checks if it exists in closed directory (meaning it's resolved).
+    """
     blockers = []
     for dep_id in issue.get("dependencies", []):
-        dep = cache.get(dep_id)
+        dep = active_cache.get(dep_id)
         if dep and dep.get("status") in (
             Status.OPEN.value,
             Status.IN_PROGRESS.value,
             Status.BLOCKED.value,
         ):
             blockers.append(dep)
+        elif dep is None and worktree is not None:
+            # Dependency not in active cache - check if it's closed
+            # If not closed, it might be a dangling reference (treat as not blocking)
+            pass
     return blockers
 
 
 def get_ready_issues(worktree: Path) -> list[dict[str, Any]]:
     """Get issues that are ready to work on (open/in_progress with no open blockers)."""
-    cache = load_all_issues(worktree)
+    cache = load_active_issues(worktree)
     ready = []
 
     for issue in cache.values():
@@ -373,7 +506,7 @@ def get_ready_issues(worktree: Path) -> list[dict[str, Any]]:
         if status not in (Status.OPEN.value, Status.IN_PROGRESS.value):
             continue
 
-        open_blockers = get_open_blockers(issue, cache)
+        open_blockers = get_open_blockers(issue, cache, worktree)
         if not open_blockers:
             ready.append(issue)
 
@@ -384,7 +517,7 @@ def get_ready_issues(worktree: Path) -> list[dict[str, Any]]:
 
 def get_blocked_issues(worktree: Path) -> list[dict[str, Any]]:
     """Get issues that are blocked by open dependencies."""
-    cache = load_all_issues(worktree)
+    cache = load_active_issues(worktree)
     blocked = []
 
     for issue in cache.values():
@@ -392,7 +525,7 @@ def get_blocked_issues(worktree: Path) -> list[dict[str, Any]]:
         if status not in (Status.OPEN.value, Status.IN_PROGRESS.value, Status.BLOCKED.value):
             continue
 
-        open_blockers = get_open_blockers(issue, cache)
+        open_blockers = get_open_blockers(issue, cache, worktree)
         if open_blockers:
             # Add blocker info to the issue
             issue["_blockers"] = [b["id"] for b in open_blockers]
@@ -455,3 +588,43 @@ def build_dependency_tree(
     _cache[full_id] = tree
 
     return tree
+
+
+def migrate_flat_to_status_dirs(worktree: Path) -> int:
+    """Migrate issues from flat structure to active/closed directories.
+
+    Returns the number of issues migrated.
+    """
+    issues_dir = repo.get_issues_path(worktree)
+    active_dir = repo.get_active_issues_path(worktree)
+    closed_dir = repo.get_closed_issues_path(worktree)
+
+    if not issues_dir.exists():
+        return 0
+
+    # Create subdirectories
+    active_dir.mkdir(parents=True, exist_ok=True)
+    closed_dir.mkdir(parents=True, exist_ok=True)
+
+    migrated = 0
+    for path in issues_dir.glob("*.json"):
+        # Skip if this is not a file in the root issues dir
+        if path.parent != issues_dir:
+            continue
+
+        issue = load_issue(path)
+        is_closed = issue.get("status") == Status.CLOSED.value
+
+        # Move to appropriate directory
+        if is_closed:
+            dest = closed_dir / path.name
+        else:
+            dest = active_dir / path.name
+
+        path.rename(dest)
+        migrated += 1
+
+    # Clear cache after migration
+    clear_cache(worktree)
+
+    return migrated
