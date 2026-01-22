@@ -32,11 +32,16 @@ Run `{cmd} ready` to check for existing issues first.
 {cmd} close <id> -r "reason"        # Complete work
 {cmd} dep add <child> <parent>      # Add dependency
 {cmd} sync                          # Save to git
+{cmd} doctor                        # Check for problems
+{cmd} compact                       # Compress old closed issues
 ```
 
 ## Status: open | in_progress | blocked | closed
 ## Priority: P0 (critical) to P4 (low)
 ## Types: bug | feature | task | epic | chore
+
+## Additional Fields (optional)
+--design "approach" --notes "context" --acceptance-criteria "done when..."
 """
 
 
