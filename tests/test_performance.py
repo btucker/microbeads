@@ -392,6 +392,25 @@ class TestMemoryEfficiency:
         # This test passes if no exception is raised
 
 
+def _print_benchmark_table(results: list[dict]) -> None:
+    """Print benchmark results as a formatted table."""
+    print("\n" + "=" * 70)
+    print("BENCHMARK RESULTS: microbeads vs bd")
+    print("=" * 70)
+    print(f"{'Operation':<25} {'mb (s)':<10} {'bd (s)':<10} {'Ratio':<10} {'Winner':<10}")
+    print("-" * 70)
+
+    for r in results:
+        ratio = r["bd"] / r["mb"] if r["mb"] > 0 else 0
+        winner = "mb" if ratio > 1 else "bd" if ratio < 1 else "tie"
+        ratio_str = f"{ratio:.2f}x"
+        print(f"{r['name']:<25} {r['mb']:<10.2f} {r['bd']:<10.2f} {ratio_str:<10} {winner:<10}")
+
+    print("-" * 70)
+    print("Ratio > 1.0 means microbeads is faster")
+    print("=" * 70 + "\n")
+
+
 @pytest.mark.slow
 class TestBenchmarkVsBd:
     """Benchmark microbeads against bd (beads) CLI for comparison.
@@ -509,10 +528,11 @@ class TestBenchmarkVsBd:
             )
         bd_elapsed = time.perf_counter() - bd_start
 
-        print(f"\n=== Create {self.NUM_ISSUES} Issues Benchmark ===")
-        print(f"microbeads: {mb_elapsed:.2f}s ({self.NUM_ISSUES / mb_elapsed:.1f} issues/sec)")
-        print(f"bd:         {bd_elapsed:.2f}s ({self.NUM_ISSUES / bd_elapsed:.1f} issues/sec)")
-        print(f"Ratio:      {bd_elapsed / mb_elapsed:.2f}x (>1 means mb is faster)")
+        _print_benchmark_table(
+            [
+                {"name": f"Create {self.NUM_ISSUES} issues", "mb": mb_elapsed, "bd": bd_elapsed},
+            ]
+        )
 
     def test_benchmark_list_issues(self, benchmark_repos: tuple[Path, Path], bd_available: str):
         """Benchmark listing issues: microbeads vs bd."""
@@ -551,7 +571,8 @@ class TestBenchmarkVsBd:
             subprocess.run([bd_available, "list"], cwd=bd_repo, capture_output=True, env=env)
         bd_elapsed = time.perf_counter() - bd_start
 
-        print("\n=== List 500 Issues (10x) Benchmark ===")
-        print(f"microbeads: {mb_elapsed:.2f}s ({10 / mb_elapsed:.1f} list ops/sec)")
-        print(f"bd:         {bd_elapsed:.2f}s ({10 / bd_elapsed:.1f} list ops/sec)")
-        print(f"Ratio:      {bd_elapsed / mb_elapsed:.2f}x (>1 means mb is faster)")
+        _print_benchmark_table(
+            [
+                {"name": "List 500 issues (10x)", "mb": mb_elapsed, "bd": bd_elapsed},
+            ]
+        )
