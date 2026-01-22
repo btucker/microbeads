@@ -1,0 +1,14 @@
+{
+  "closed_at": "2026-01-22T05:43:53Z",
+  "closed_reason": "Cleanup implemented",
+  "created_at": "2026-01-22T05:43:24Z",
+  "dependencies": [],
+  "description": "",
+  "id": "bd-f3b8",
+  "labels": [],
+  "priority": 2,
+  "status": "closed",
+  "title": "Test stale branch cleanup",
+  "type": "task",
+  "updated_at": "2026-01-22T05:43:53Z"
+}
