@@ -30,7 +30,7 @@ class Context:
     def worktree(self):
         if self._worktree is None:
             if not repo.is_initialized(self.repo_root):
-                raise click.ClickException("Microbeads is not initialized. Run 'bd init' first.")
+                raise click.ClickException("Microbeads is not initialized. Run 'mb init' first.")
             self._worktree = repo.ensure_worktree(self.repo_root)
         return self._worktree
 

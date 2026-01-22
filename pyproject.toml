@@ -12,7 +12,6 @@ dependencies = [
 ]
 
 [project.scripts]
-bd = "microbeads.cli:main"
 mb = "microbeads.cli:main"
 microbeads = "microbeads.cli:main"
 

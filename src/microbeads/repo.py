@@ -155,7 +155,7 @@ def ensure_worktree(repo_root: Path) -> Path:
                 run_git("fetch", "origin", BRANCH_NAME, cwd=repo_root)
             run_git("worktree", "add", str(worktree), BRANCH_NAME, cwd=repo_root)
         else:
-            raise RuntimeError("Microbeads is not initialized. Run 'bd init' first.")
+            raise RuntimeError("Microbeads is not initialized. Run 'mb init' first.")
 
     return worktree
 

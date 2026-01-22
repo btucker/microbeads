@@ -5,12 +5,15 @@ A simplified git-backed issue tracker for AI agents. Issues are stored as indivi
 ## Installation
 
 ```bash
-# Run directly with uvx (recommended)
+# Run directly with uvx (no install needed)
 uvx microbeads --help
 
-# Or install globally
+# Or install globally for the `mb` command
 uv tool install microbeads
+mb --help
 ```
+
+After `uv tool install`, you get two commands: `mb` (short) and `microbeads` (full).
 
 ## Quick Start
 
@@ -18,7 +21,7 @@ uv tool install microbeads
 
 ```bash
 cd your-repo
-uvx microbeads init
+mb init
 ```
 
 This creates:
@@ -31,7 +34,7 @@ This creates:
 If you have the reference beads implementation (`bd`) installed with existing issues:
 
 ```bash
-uvx microbeads init --import-beads
+mb init --import-beads
 ```
 
 This imports all issues from your existing beads database.
@@ -40,13 +43,13 @@ This imports all issues from your existing beads database.
 
 ```bash
 # Create an issue
-uvx microbeads create "Fix authentication bug" -p 1 -t bug
+mb create "Fix authentication bug" -p 1 -t bug
 
 # List issues
-uvx microbeads list
+mb list
 
 # See what's ready to work on
-uvx microbeads ready
+mb ready
 ```
 
 ## Usage
@@ -54,7 +57,7 @@ uvx microbeads ready
 ### Creating Issues
 
 ```bash
-uvx microbeads create "Title" [options]
+mb create "Title" [options]
 
 Options:
   -d, --description TEXT  Issue description
@@ -66,37 +69,37 @@ Options:
 ### Viewing Issues
 
 ```bash
-uvx microbeads list              # All issues
-uvx microbeads list -s open      # Filter by status
-uvx microbeads list -p 1         # Filter by priority
-uvx microbeads list -l backend   # Filter by label
-uvx microbeads show <id>         # Show issue details
-uvx microbeads ready             # Issues with no blockers
-uvx microbeads blocked           # Issues waiting on dependencies
+mb list              # All issues
+mb list -s open      # Filter by status
+mb list -p 1         # Filter by priority
+mb list -l backend   # Filter by label
+mb show <id>         # Show issue details
+mb ready             # Issues with no blockers
+mb blocked           # Issues waiting on dependencies
 ```
 
 ### Updating Issues
 
 ```bash
-uvx microbeads update <id> -s in_progress    # Change status
-uvx microbeads update <id> -p 1              # Change priority
-uvx microbeads update <id> --add-label urgent
-uvx microbeads close <id> -r "Completed"
-uvx microbeads reopen <id>
+mb update <id> -s in_progress    # Change status
+mb update <id> -p 1              # Change priority
+mb update <id> --add-label urgent
+mb close <id> -r "Completed"
+mb reopen <id>
 ```
 
 ### Dependencies
 
 ```bash
-uvx microbeads dep add <child> <parent>   # child depends on parent
-uvx microbeads dep rm <child> <parent>    # remove dependency
-uvx microbeads dep tree <id>              # show dependency tree
+mb dep add <child> <parent>   # child depends on parent
+mb dep rm <child> <parent>    # remove dependency
+mb dep tree <id>              # show dependency tree
 ```
 
 ### Syncing
 
 ```bash
-uvx microbeads sync    # Commit and push to orphan branch
+mb sync    # Commit and push to orphan branch
 ```
 
 ### JSON Output
@@ -104,9 +107,9 @@ uvx microbeads sync    # Commit and push to orphan branch
 Add `--json` for machine-readable output:
 
 ```bash
-uvx microbeads --json list
-uvx microbeads --json show bd-abc
-uvx microbeads --json ready
+mb --json list
+mb --json show bd-abc
+mb --json ready
 ```
 
 ## How It Works
