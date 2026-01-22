@@ -126,6 +126,13 @@ def init(repo_root: Path) -> Path:
         run_git("add", ".", cwd=worktree)
         run_git("commit", "-m", "Initialize microbeads", cwd=worktree)
 
+        # Push the new branch
+        result = run_git("push", "-u", "origin", BRANCH_NAME, cwd=worktree, check=False)
+        if result.returncode != 0 and "does not appear to be a git repository" not in result.stderr:
+            # Only raise if it's not a "no remote" error
+            if "403" not in result.stderr and "rejected" not in result.stderr:
+                raise RuntimeError(f"Push failed: {result.stderr}")
+
     # Configure the JSON merge driver in the main repo
     configure_merge_driver(repo_root)
 
