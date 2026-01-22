@@ -110,6 +110,15 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
     if issue.get("description"):
         lines.append(f"Description: {issue['description']}")
 
+    if issue.get("design"):
+        lines.append(f"Design:      {issue['design']}")
+
+    if issue.get("notes"):
+        lines.append(f"Notes:       {issue['notes']}")
+
+    if issue.get("acceptance_criteria"):
+        lines.append(f"Acceptance:  {issue['acceptance_criteria']}")
+
     if issue.get("dependencies"):
         lines.append(f"Depends on:  {', '.join(issue['dependencies'])}")
 
@@ -120,6 +129,10 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
         lines.append(f"Closed:      {issue['closed_at']}")
         if issue.get("closed_reason"):
             lines.append(f"Reason:      {issue['closed_reason']}")
+
+    # Show if compacted
+    if issue.get("compacted"):
+        lines.append("(compacted)")
 
     return "\n".join(lines)
 
@@ -330,7 +343,12 @@ def init(ctx: Context, import_beads: bool):
 @click.option("-l", "--label", multiple=True, help="Labels (can specify multiple)")
 @click.option("--design", default="", help="Design notes or approach")
 @click.option("--notes", default="", help="General notes")
-@click.option("--acceptance-criteria", "acceptance_criteria", default="", help="Acceptance criteria / definition of done")
+@click.option(
+    "--acceptance-criteria",
+    "acceptance_criteria",
+    default="",
+    help="Acceptance criteria / definition of done",
+)
 @pass_context
 def create(
     ctx: Context,
