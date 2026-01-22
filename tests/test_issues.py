@@ -9,8 +9,11 @@ import pytest
 from microbeads.issues import (
     IssueType,
     Status,
+    _add_history_entry,
     add_dependency,
     close_issue,
+    compact_closed_issues,
+    compact_issue,
     create_issue,
     generate_id,
     get_blocked_issues,
@@ -26,6 +29,7 @@ from microbeads.issues import (
     remove_dependency,
     reopen_issue,
     resolve_issue_id,
+    run_doctor,
     save_issue,
     update_issue,
 )
@@ -442,3 +446,323 @@ class TestReadyAndBlockedIssues:
         blocked = get_blocked_issues(mock_worktree)
         assert len(blocked) == 1
         assert blocked[0]["id"] == child["id"]
+
+
+class TestHistoryTracking:
+    """Tests for issue history tracking."""
+
+    def test_add_history_entry_creates_history(self):
+        """Test that _add_history_entry creates history list if not present."""
+        issue = {"id": "test-1", "title": "Test"}
+        _add_history_entry(issue, "status", "open", "closed", "2024-01-01T00:00:00Z")
+
+        assert "history" in issue
+        assert len(issue["history"]) == 1
+        assert issue["history"][0]["field"] == "status"
+        assert issue["history"][0]["old"] == "open"
+        assert issue["history"][0]["new"] == "closed"
+        assert issue["history"][0]["at"] == "2024-01-01T00:00:00Z"
+
+    def test_add_history_entry_appends(self):
+        """Test that _add_history_entry appends to existing history."""
+        issue = {"id": "test-1", "title": "Test", "history": [{"field": "old"}]}
+        _add_history_entry(issue, "priority", 2, 1)
+
+        assert len(issue["history"]) == 2
+        assert issue["history"][1]["field"] == "priority"
+
+    def test_update_tracks_status_change(self, mock_worktree: Path):
+        """Test that update_issue tracks status changes in history."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(mock_worktree, issue["id"], status=Status.IN_PROGRESS)
+
+        assert "history" in updated
+        history = [h for h in updated["history"] if h["field"] == "status"]
+        assert len(history) == 1
+        assert history[0]["old"] == "open"
+        assert history[0]["new"] == "in_progress"
+
+    def test_update_tracks_priority_change(self, mock_worktree: Path):
+        """Test that update_issue tracks priority changes in history."""
+        issue = create_issue("Test", mock_worktree, priority=2)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(mock_worktree, issue["id"], priority=0)
+
+        assert "history" in updated
+        history = [h for h in updated["history"] if h["field"] == "priority"]
+        assert len(history) == 1
+        assert history[0]["old"] == 2
+        assert history[0]["new"] == 0
+
+    def test_close_tracks_status_in_history(self, mock_worktree: Path):
+        """Test that close_issue records status change in history."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        closed = close_issue(mock_worktree, issue["id"], reason="Done")
+
+        assert "history" in closed
+        history = [h for h in closed["history"] if h["field"] == "status"]
+        assert len(history) == 1
+        assert history[0]["old"] == "open"
+        assert history[0]["new"] == "closed"
+
+    def test_reopen_tracks_status_in_history(self, mock_worktree: Path):
+        """Test that reopen_issue records status change in history."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+        close_issue(mock_worktree, issue["id"])
+
+        reopened = reopen_issue(mock_worktree, issue["id"])
+
+        assert "history" in reopened
+        history = [h for h in reopened["history"] if h["field"] == "status"]
+        # Should have two entries: open->closed and closed->open
+        assert len(history) == 2
+        assert history[1]["old"] == "closed"
+        assert history[1]["new"] == "open"
+
+
+class TestAdditionalIssueFields:
+    """Tests for additional issue fields (design, notes, acceptance_criteria)."""
+
+    def test_create_issue_with_additional_fields(self, mock_worktree: Path):
+        """Test creating issue with design, notes, and acceptance_criteria."""
+        issue = create_issue(
+            "Test Feature",
+            mock_worktree,
+            design="Use strategy pattern",
+            notes="Consider performance",
+            acceptance_criteria="All tests pass",
+        )
+
+        assert issue["design"] == "Use strategy pattern"
+        assert issue["notes"] == "Consider performance"
+        assert issue["acceptance_criteria"] == "All tests pass"
+
+    def test_update_design_field(self, mock_worktree: Path):
+        """Test updating the design field."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(mock_worktree, issue["id"], design="New design approach")
+
+        assert updated["design"] == "New design approach"
+        history = [h for h in updated.get("history", []) if h["field"] == "design"]
+        assert len(history) == 1
+
+    def test_update_notes_field(self, mock_worktree: Path):
+        """Test updating the notes field."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(mock_worktree, issue["id"], notes="Important context")
+
+        assert updated["notes"] == "Important context"
+
+    def test_update_acceptance_criteria_field(self, mock_worktree: Path):
+        """Test updating the acceptance_criteria field."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(
+            mock_worktree, issue["id"], acceptance_criteria="Feature complete and tested"
+        )
+
+        assert updated["acceptance_criteria"] == "Feature complete and tested"
+
+
+class TestDoctorCommand:
+    """Tests for the doctor (health check) command."""
+
+    def test_doctor_no_problems(self, mock_worktree: Path):
+        """Test doctor returns no problems for healthy issues."""
+        issue = create_issue("Healthy Issue", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        result = run_doctor(mock_worktree)
+
+        assert result["problems"] == []
+        assert result["fixed"] == []
+        assert result["total_issues"] == 1
+
+    def test_doctor_detects_orphaned_dependency(self, mock_worktree: Path):
+        """Test doctor detects references to non-existent issues."""
+        issue = create_issue("Issue with orphan dep", mock_worktree)
+        issue["dependencies"] = ["nonexistent-1234"]
+        save_issue(mock_worktree, issue)
+
+        result = run_doctor(mock_worktree)
+
+        assert len(result["problems"]) == 1
+        assert "orphaned dependency" in result["problems"][0]["problems"][0]
+
+    def test_doctor_fixes_orphaned_dependency(self, mock_worktree: Path):
+        """Test doctor can fix orphaned dependencies."""
+        issue = create_issue("Issue with orphan dep", mock_worktree)
+        issue["dependencies"] = ["nonexistent-1234"]
+        save_issue(mock_worktree, issue)
+
+        result = run_doctor(mock_worktree, fix=True)
+
+        assert len(result["fixed"]) == 1
+        assert "removed orphaned dependencies" in result["fixed"][0]["fixes"][0]
+
+        # Verify issue was fixed
+        fixed_issue = get_issue(mock_worktree, issue["id"])
+        assert fixed_issue["dependencies"] == []
+
+    def test_doctor_detects_stale_blocked_status(self, mock_worktree: Path):
+        """Test doctor detects issues marked blocked with no blockers."""
+        issue = create_issue("Stale blocked", mock_worktree)
+        issue["status"] = Status.BLOCKED.value
+        issue["dependencies"] = []
+        save_issue(mock_worktree, issue)
+
+        result = run_doctor(mock_worktree)
+
+        assert len(result["problems"]) == 1
+        assert "marked blocked but has no open blockers" in result["problems"][0]["problems"][0]
+
+    def test_doctor_fixes_stale_blocked_status(self, mock_worktree: Path):
+        """Test doctor can fix stale blocked status."""
+        issue = create_issue("Stale blocked", mock_worktree)
+        issue["status"] = Status.BLOCKED.value
+        save_issue(mock_worktree, issue)
+
+        result = run_doctor(mock_worktree, fix=True)
+
+        assert len(result["fixed"]) == 1
+
+        fixed_issue = get_issue(mock_worktree, issue["id"])
+        assert fixed_issue["status"] == Status.OPEN.value
+
+    def test_doctor_detects_invalid_priority(self, mock_worktree: Path):
+        """Test doctor detects invalid priority values."""
+        issue = create_issue("Invalid priority", mock_worktree)
+        issue["priority"] = 10  # Invalid - should be 0-4
+        save_issue(mock_worktree, issue)
+
+        result = run_doctor(mock_worktree)
+
+        assert len(result["problems"]) == 1
+        assert "invalid priority" in result["problems"][0]["problems"][0]
+
+    def test_doctor_detects_dependency_cycle(self, mock_worktree: Path):
+        """Test doctor detects dependency cycles."""
+        issue_a = create_issue("Issue A", mock_worktree)
+        issue_b = create_issue("Issue B", mock_worktree)
+        # Create a cycle: A depends on B, B depends on A
+        issue_a["dependencies"] = [issue_b["id"]]
+        issue_b["dependencies"] = [issue_a["id"]]
+        save_issue(mock_worktree, issue_a)
+        save_issue(mock_worktree, issue_b)
+
+        result = run_doctor(mock_worktree)
+
+        # Should detect cycle
+        cycle_problems = [
+            p for p in result["problems"] if any("cycle" in prob for prob in p["problems"])
+        ]
+        assert len(cycle_problems) >= 1
+
+
+class TestCompactCommand:
+    """Tests for issue compaction."""
+
+    def test_compact_issue_closed(self):
+        """Test compacting a closed issue."""
+        issue = {
+            "id": "test-1234",
+            "title": "Completed feature",
+            "status": "closed",
+            "type": "feature",
+            "priority": 1,
+            "description": "Long description\nwith multiple lines\nof text",
+            "labels": ["frontend", "urgent"],
+            "dependencies": ["dep-1", "dep-2"],
+            "history": [{"field": "status", "old": "open", "new": "closed"}],
+            "closed_at": "2024-01-01T00:00:00Z",
+            "closed_reason": "Done",
+            "design": "Some design notes",
+            "notes": "Some notes",
+        }
+
+        compacted = compact_issue(issue)
+
+        # Essential fields preserved
+        assert compacted["id"] == "test-1234"
+        assert compacted["title"] == "Completed feature"
+        assert compacted["status"] == "closed"
+        assert compacted["type"] == "feature"
+        assert compacted["priority"] == 1
+        assert compacted["closed_at"] == "2024-01-01T00:00:00Z"
+        assert compacted["closed_reason"] == "Done"
+        assert compacted["compacted"] is True
+
+        # Verbose fields removed
+        assert "description" not in compacted
+        assert "history" not in compacted
+        assert "design" not in compacted
+        assert "notes" not in compacted
+        assert "labels" not in compacted
+        assert "dependencies" not in compacted
+
+        # Counts preserved
+        assert compacted["label_count"] == 2
+        assert compacted["dependency_count"] == 2
+
+        # Summary from first line of description
+        assert compacted["summary"] == "Long description"
+
+    def test_compact_issue_skips_open(self):
+        """Test that compact_issue doesn't modify open issues."""
+        issue = {
+            "id": "test-1234",
+            "title": "Open issue",
+            "status": "open",
+            "description": "Should not be compacted",
+        }
+
+        compacted = compact_issue(issue)
+
+        assert compacted == issue  # Unchanged
+
+    def test_compact_closed_issues_respects_age(self, mock_worktree: Path):
+        """Test that compact_closed_issues respects the age threshold."""
+        from datetime import datetime, timedelta, timezone
+
+        # Create a recently closed issue
+        recent = create_issue("Recent", mock_worktree)
+        recent["status"] = Status.CLOSED.value
+        recent["closed_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        save_issue(mock_worktree, recent)
+
+        # Create an old closed issue
+        old = create_issue("Old", mock_worktree)
+        old["status"] = Status.CLOSED.value
+        old_date = datetime.now(timezone.utc) - timedelta(days=30)
+        old["closed_at"] = old_date.isoformat().replace("+00:00", "Z")
+        save_issue(mock_worktree, old)
+
+        result = compact_closed_issues(mock_worktree, older_than_days=7)
+
+        # Only old issue should be compacted
+        assert len(result["compacted"]) == 1
+        assert result["compacted"][0]["id"] == old["id"]
+
+    def test_compact_closed_issues_skips_already_compacted(self, mock_worktree: Path):
+        """Test that already compacted issues are skipped."""
+        issue = create_issue("Already compacted", mock_worktree)
+        issue["status"] = Status.CLOSED.value
+        issue["compacted"] = True
+        issue["closed_at"] = "2020-01-01T00:00:00Z"  # Old
+        save_issue(mock_worktree, issue)
+
+        result = compact_closed_issues(mock_worktree, older_than_days=1)
+
+        assert result["compacted"] == []
+        assert result["skipped"] == 1
