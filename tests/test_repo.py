@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from microbeads import get_command_name
+from microbeads import _is_dogfooding, get_command_name
 from microbeads.repo import (
     BEADS_DIR,
     ISSUES_DIR,
@@ -164,6 +164,41 @@ class TestIsInitialized:
         beads_dir.mkdir()
 
         assert is_initialized(temp_git_repo)
+
+
+class TestIsDogfooding:
+    """Tests for _is_dogfooding helper."""
+
+    def test_returns_true_in_microbeads_repo(self, tmp_path: Path):
+        """Test that True is returned when in microbeads repo."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "microbeads"\n')
+
+        with patch("microbeads.Path.cwd", return_value=tmp_path):
+            assert _is_dogfooding() is True
+
+    def test_returns_true_in_subdirectory(self, tmp_path: Path):
+        """Test that True is returned when in a subdirectory of microbeads repo."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "microbeads"\n')
+        subdir = tmp_path / "src" / "microbeads"
+        subdir.mkdir(parents=True)
+
+        with patch("microbeads.Path.cwd", return_value=subdir):
+            assert _is_dogfooding() is True
+
+    def test_returns_false_for_other_project(self, tmp_path: Path):
+        """Test that False is returned for non-microbeads projects."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "other-project"\n')
+
+        with patch("microbeads.Path.cwd", return_value=tmp_path):
+            assert _is_dogfooding() is False
+
+    def test_returns_false_when_no_pyproject(self, tmp_path: Path):
+        """Test that False is returned when no pyproject.toml exists."""
+        with patch("microbeads.Path.cwd", return_value=tmp_path):
+            assert _is_dogfooding() is False
 
 
 class TestGetCommandName:
