@@ -391,6 +391,53 @@ class TestErrorHandling:
         # The important thing is it doesn't crash
 
 
+class TestInitAutoSetupClaude:
+    """E2E tests for auto-setup Claude hooks during init."""
+
+    def test_init_auto_setup_claude_with_claude_dir(self, e2e_repo: Path):
+        """Test that init auto-runs setup claude when .claude directory exists."""
+        # Create .claude directory
+        claude_dir = e2e_repo / ".claude"
+        claude_dir.mkdir()
+
+        result = run_mb("init", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "Detected Claude Code artifacts" in result.stdout
+        assert "Installing Claude hooks" in result.stdout
+
+        # Verify hooks were installed
+        settings_path = claude_dir / "settings.json"
+        assert settings_path.exists()
+        settings = json.loads(settings_path.read_text())
+        assert "hooks" in settings
+        assert "SessionStart" in settings["hooks"]
+
+    def test_init_auto_setup_claude_with_claude_md(self, e2e_repo: Path):
+        """Test that init auto-runs setup claude when CLAUDE.md file exists."""
+        # Create CLAUDE.md file
+        claude_md = e2e_repo / "CLAUDE.md"
+        claude_md.write_text("# Claude Instructions\n")
+
+        result = run_mb("init", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "Detected Claude Code artifacts" in result.stdout
+        assert "Installing Claude hooks" in result.stdout
+
+        # Verify hooks were installed
+        settings_path = e2e_repo / ".claude" / "settings.json"
+        assert settings_path.exists()
+
+    def test_init_no_auto_setup_without_claude_artifacts(self, e2e_repo: Path):
+        """Test that init does NOT auto-run setup claude when no Claude artifacts exist."""
+        result = run_mb("init", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "Detected Claude Code artifacts" not in result.stdout
+
+        # Verify hooks were NOT installed (no .claude/settings.json)
+        settings_path = e2e_repo / ".claude" / "settings.json"
+        assert not settings_path.exists()
+
+
 class TestLabels:
     """E2E tests for label management."""
 

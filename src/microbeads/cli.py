@@ -297,6 +297,16 @@ def init(ctx: Context, import_beads: bool):
     # Update AGENTS.md
     update_agents_md(ctx.repo_root, ctx.json_output)
 
+    # Auto-setup Claude hooks if Claude artifacts exist
+    claude_dir = ctx.repo_root / ".claude"
+    claude_md = ctx.repo_root / "CLAUDE.md"
+    if claude_dir.exists() or claude_md.exists():
+        if not ctx.json_output:
+            click.echo("Detected Claude Code artifacts, setting up hooks...")
+        settings_dir = ctx.repo_root / ".claude"
+        settings_path = settings_dir / "settings.json"
+        _install_claude_hooks(settings_dir, settings_path, "project")
+
     output(
         ctx,
         {"status": "initialized", "worktree": str(worktree), "imported": imported},
@@ -585,6 +595,8 @@ def check(ctx: Context):
 def sync(ctx: Context, message: str | None):
     """Commit and push changes to the microbeads branch."""
     repo.sync(ctx.repo_root, message)
+    # Clear cache after sync since git may have updated files
+    issues.clear_cache(ctx.worktree)
     output(ctx, {"status": "synced"}, "Changes synced.")
 
 
@@ -619,6 +631,10 @@ def prime():
 
     # Sync to pull any remote changes
     repo.sync(repo_root)
+
+    # Clear cache after sync since git may have updated files
+    worktree = repo.get_worktree_path(repo_root)
+    issues.clear_cache(worktree)
 
     # Check for custom PRIME.md override
     custom_prime = repo_root / ".microbeads" / "PRIME.md"

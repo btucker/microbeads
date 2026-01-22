@@ -21,6 +21,7 @@ from microbeads.issues import (
     get_ready_issues,
     issue_to_json,
     list_issues,
+    load_active_issues,
     load_all_issues,
     load_issue,
     now_iso,
@@ -391,22 +392,23 @@ class TestDependencies:
         save_issue(mock_worktree, parent)
         save_issue(mock_worktree, child)
 
-        cache = load_all_issues(mock_worktree)
-        blockers = get_open_blockers(cache[child["id"]], cache)
+        cache = load_active_issues(mock_worktree)
+        blockers = get_open_blockers(cache[child["id"]], cache, mock_worktree)
         assert len(blockers) == 1
         assert blockers[0]["id"] == parent["id"]
 
     def test_get_open_blockers_closed_parent(self, mock_worktree: Path):
         """Test that closed issues don't block."""
         parent = create_issue("Parent", mock_worktree)
-        parent["status"] = Status.CLOSED.value
         child = create_issue("Child", mock_worktree)
         child["dependencies"] = [parent["id"]]
+        # Save parent first, then close it (which moves it to closed dir)
         save_issue(mock_worktree, parent)
         save_issue(mock_worktree, child)
+        close_issue(mock_worktree, parent["id"])
 
-        cache = load_all_issues(mock_worktree)
-        blockers = get_open_blockers(cache[child["id"]], cache)
+        cache = load_active_issues(mock_worktree)
+        blockers = get_open_blockers(cache[child["id"]], cache, mock_worktree)
         assert len(blockers) == 0
 
 
@@ -751,6 +753,7 @@ class TestJsonCorruptionHandling:
     def test_load_all_issues_skips_corrupted(self, mock_worktree: Path):
         """Test that load_all_issues skips corrupted files by default."""
         from microbeads import repo
+        from microbeads.issues import clear_cache
 
         # Create valid issues
         issue1 = create_issue("Valid Issue 1", mock_worktree)
@@ -758,8 +761,11 @@ class TestJsonCorruptionHandling:
         save_issue(mock_worktree, issue1)
         save_issue(mock_worktree, issue2)
 
-        # Create corrupted file
-        issues_dir = repo.get_issues_path(mock_worktree)
+        # Clear cache so we re-read from disk
+        clear_cache(mock_worktree)
+
+        # Create corrupted file in active directory
+        issues_dir = repo.get_active_issues_path(mock_worktree)
         corrupted_path = issues_dir / "corrupted-1234.json"
         corrupted_path.write_text("{ invalid json")
 
@@ -773,13 +779,17 @@ class TestJsonCorruptionHandling:
     def test_load_all_issues_raises_on_corrupted(self, mock_worktree: Path):
         """Test that load_all_issues raises when skip_corrupted is False."""
         from microbeads import repo
+        from microbeads.issues import clear_cache
 
         # Create valid issue
         issue = create_issue("Valid Issue", mock_worktree)
         save_issue(mock_worktree, issue)
 
-        # Create corrupted file
-        issues_dir = repo.get_issues_path(mock_worktree)
+        # Clear cache so we re-read from disk
+        clear_cache(mock_worktree)
+
+        # Create corrupted file in active directory
+        issues_dir = repo.get_active_issues_path(mock_worktree)
         corrupted_path = issues_dir / "corrupted-1234.json"
         corrupted_path.write_text("{ invalid json")
 
@@ -790,7 +800,7 @@ class TestJsonCorruptionHandling:
         """Test that get_issue raises for corrupted exact match."""
         from microbeads import repo
 
-        issues_dir = repo.get_issues_path(mock_worktree)
+        issues_dir = repo.get_active_issues_path(mock_worktree)
         corrupted_path = issues_dir / "test-corrupted.json"
         corrupted_path.write_text("not json at all")
 
@@ -806,7 +816,7 @@ class TestJsonCorruptionHandling:
         save_issue(mock_worktree, issue)
 
         # Create corrupted file with different ID but same prefix as we'll search
-        issues_dir = repo.get_issues_path(mock_worktree)
+        issues_dir = repo.get_active_issues_path(mock_worktree)
         # The issue ID starts with "test-" (from mock_worktree prefix)
         # Create a corrupted file that starts with "test-" too
         corrupted_path = issues_dir / "test-aaacorrupt.json"

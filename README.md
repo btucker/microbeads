@@ -134,6 +134,54 @@ Benefits:
 
 The `microbeads` orphan branch keeps issue data completely separate from your code.
 
+## Branch Strategy
+
+Microbeads uses a branching strategy to support multiple concurrent sessions, especially in Claude Code web environments.
+
+### Canonical Branch
+
+The main branch for issue storage is `microbeads` (an orphan branch). In normal operation, `mb sync` commits and pushes directly to this branch.
+
+### Claude Code Web Session Branches
+
+Claude Code web sessions run on restricted branches like `claude/feature-name-XXXX` where `XXXX` is a session ID. These sessions can only push to branches matching their `claude/*` prefix.
+
+**The workaround:** When microbeads detects it's running in a Claude Code web session (by checking if the current branch starts with `claude/`), it automatically pushes to a session-specific branch:
+
+```
+claude/microbeads-XXXX
+```
+
+Where `XXXX` matches the session ID from the code branch (e.g., `claude/fix-bug-abc123` → `claude/microbeads-abc123`).
+
+### Multi-Session Sync
+
+When you run `mb sync`, microbeads:
+
+1. **Fetches** all remote branches matching `microbeads` or `claude/microbeads-*`
+2. **Merges** changes from other sessions into your local `microbeads` branch
+3. **Commits** your local changes
+4. **Pushes** to the appropriate target branch (canonical or session-specific)
+5. **Cleans up** stale session branches that have been successfully merged
+
+This ensures all sessions eventually converge to the same state, even when Claude Code web sessions can't push directly to the canonical branch.
+
+### Branch Flow Diagram
+
+```
+Session A (local/CLI)     Session B (Claude Code web)
+        │                         │
+        │                         │
+        ▼                         ▼
+   microbeads ◄─── merge ───► claude/microbeads-abc123
+        │                         │
+        └─────────┬───────────────┘
+                  │
+                  ▼
+            origin/microbeads
+            (canonical state)
+```
+
 ## Claude Code Integration
 
 Install hooks so Claude Code automatically loads workflow context:
