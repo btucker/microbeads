@@ -1,16 +1,12 @@
 {
   "closed_at": "2026-01-22T10:30:52Z",
   "closed_reason": "Investigated: uv run baseline is ~80ms, Python import is ~90ms, mb CLI total is ~220ms. The ~130ms overhead is mainly from Click framework (~40ms) which is necessary. Startup time is reasonable. Users wanting faster startup can install globally with 'pip install microbeads' or 'pipx install microbeads'.",
-  "created_at": "2026-01-22T06:07:17Z",
-  "dependencies": [],
-  "description": "uv run mb create feels slow. Profile startup time - may be uv overhead, venv creation, or module imports. Consider caching or lazy loading.",
+  "compacted": true,
   "id": "bd-a744",
-  "labels": [
-    "performance"
-  ],
+  "label_count": 1,
   "priority": 2,
   "status": "closed",
+  "summary": "uv run mb create feels slow. Profile startup time - may be uv overhead, venv creation, or module imp",
   "title": "Investigate slow uv run startup time",
-  "type": "task",
-  "updated_at": "2026-01-22T10:30:52Z"
+  "type": "task"
 }

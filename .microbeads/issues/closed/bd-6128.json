@@ -1,16 +1,12 @@
 {
   "closed_at": "2026-01-22T10:33:54Z",
   "closed_reason": "Added would_create_cycle function for circular dependency detection. Updated add_dependency to check for cycles before adding dependency. Raises ValidationError with clear message when cycle would be created.",
-  "created_at": "2026-01-22T06:10:27Z",
-  "dependencies": [],
-  "description": "add_dependency() should detect and reject circular dependencies (A depends on B, B depends on A). Currently only build_dependency_tree detects cycles after the fact.",
+  "compacted": true,
   "id": "bd-6128",
-  "labels": [
-    "validation"
-  ],
+  "label_count": 1,
   "priority": 2,
   "status": "closed",
+  "summary": "add_dependency() should detect and reject circular dependencies (A depends on B, B depends on A). Cu",
   "title": "Prevent circular dependencies in add_dependency",
-  "type": "bug",
-  "updated_at": "2026-01-22T10:33:54Z"
+  "type": "bug"
 }

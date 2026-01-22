@@ -1,18 +1,13 @@
 {
   "closed_at": "2026-01-22T10:16:07Z",
   "closed_reason": "Added TestMultiSessionSyncAndMerge class with 4 E2E tests: two sessions sync different issues, concurrent updates to same issue (with merge driver), session branch naming, and three session convergence. Also fixed sync order bug to commit local changes before pulling.",
-  "created_at": "2026-01-22T06:05:54Z",
-  "dependencies": [
-    "bd-7d7a"
-  ],
-  "description": "Test two worktrees editing same issue, push both, verify merge driver resolves. Test claude/microbeads-* branch sync and cleanup.",
+  "compacted": true,
+  "dependency_count": 1,
   "id": "bd-0d7d",
-  "labels": [
-    "testing"
-  ],
+  "label_count": 1,
   "priority": 1,
   "status": "closed",
+  "summary": "Test two worktrees editing same issue, push both, verify merge driver resolves. Test claude/microbea",
   "title": "E2E test: multi-session sync and merge",
-  "type": "task",
-  "updated_at": "2026-01-22T10:16:07Z"
+  "type": "task"
 }

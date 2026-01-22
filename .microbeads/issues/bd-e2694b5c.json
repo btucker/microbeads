@@ -1,0 +1,14 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T11:10:29Z",
+  "dependencies": [],
+  "description": "Implement stealth mode for mb init that enables local-only issue tracking without committing to the repository. Useful for contributors who want to track personal work without affecting the shared repo.",
+  "id": "bd-e2694b5c",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Add stealth mode (--stealth)",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:10:29Z"
+}

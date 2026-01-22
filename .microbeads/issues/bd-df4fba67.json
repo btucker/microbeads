@@ -1,0 +1,14 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T11:09:37Z",
+  "dependencies": [],
+  "description": "Implement memory decay feature that summarizes closed tasks to reduce context window consumption for long-running AI agent sessions. Closed issues should be compacted/summarized to save space while preserving key information.",
+  "id": "bd-df4fba67",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Add semantic compaction for closed issues",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:09:37Z"
+}
