@@ -10,6 +10,7 @@ from typing import Any
 import click
 
 from . import get_command_name, issues, merge, repo
+from .issues import CorruptedFileError, ValidationError
 
 # Condensed workflow instructions for Claude Code hooks
 PRIME_TEMPLATE = """# Microbeads Issue Tracking
@@ -323,16 +324,19 @@ def create(
     ctx: Context, title: str, description: str, issue_type: str, priority: int, label: tuple
 ):
     """Create a new issue."""
-    issue = issues.create_issue(
-        title=title,
-        worktree=ctx.worktree,
-        description=description,
-        issue_type=issues.IssueType(issue_type),
-        priority=priority,
-        labels=list(label) if label else None,
-    )
-    issues.save_issue(ctx.worktree, issue)
-    output(ctx, issue, f"Created {issue['id']}: {title}")
+    try:
+        issue = issues.create_issue(
+            title=title,
+            worktree=ctx.worktree,
+            description=description,
+            issue_type=issues.IssueType(issue_type),
+            priority=priority,
+            labels=list(label) if label else None,
+        )
+        issues.save_issue(ctx.worktree, issue)
+        output(ctx, issue, f"Created {issue['id']}: {issue['title']}")
+    except ValidationError as e:
+        raise click.ClickException(str(e)) from None
 
 
 @main.command("list")
@@ -386,7 +390,11 @@ def list_cmd(
 @pass_context
 def show(ctx: Context, issue_id: str):
     """Show issue details."""
-    issue = issues.get_issue(ctx.worktree, issue_id)
+    try:
+        issue = issues.get_issue(ctx.worktree, issue_id)
+    except CorruptedFileError as e:
+        raise click.ClickException(f"Issue file is corrupted: {e.path}") from None
+
     if issue is None:
         raise click.ClickException(f"Issue not found: {issue_id}")
 
@@ -434,7 +442,7 @@ def update(
             remove_labels=list(remove_label) if remove_label else None,
         )
         output(ctx, issue, f"Updated {issue['id']}")
-    except ValueError as e:
+    except (ValueError, ValidationError) as e:
         raise click.ClickException(str(e)) from None
 
 
@@ -512,7 +520,7 @@ def dep_add(ctx: Context, child_id: str, parent_id: str):
     try:
         issue = issues.add_dependency(ctx.worktree, child_id, parent_id)
         output(ctx, issue, f"{issue['id']} now depends on {parent_id}")
-    except ValueError as e:
+    except (ValueError, ValidationError) as e:
         raise click.ClickException(str(e)) from None
 
 
@@ -540,6 +548,35 @@ def dep_tree(ctx: Context, issue_id: str):
         output(ctx, tree)
     else:
         click.echo(format_dependency_tree(tree))
+
+
+@main.command()
+@pass_context
+def check(ctx: Context):
+    """Check for corrupted issue files."""
+    issues_dir = repo.get_issues_path(ctx.worktree)
+
+    if not issues_dir.exists():
+        output(ctx, {"corrupted": [], "total": 0}, "No issues directory found.")
+        return
+
+    corrupted = []
+    total = 0
+    for path in issues_dir.glob("*.json"):
+        total += 1
+        try:
+            issues.load_issue(path)
+        except CorruptedFileError as e:
+            corrupted.append({"id": path.stem, "path": str(path), "error": str(e.original_error)})
+
+    if ctx.json_output:
+        output(ctx, {"corrupted": corrupted, "total": total})
+    elif corrupted:
+        click.echo(f"Found {len(corrupted)} corrupted file(s) out of {total}:")
+        for c in corrupted:
+            click.echo(f"  - {c['id']}: {c['error']}")
+    else:
+        click.echo(f"All {total} issue file(s) are valid.")
 
 
 @main.command()

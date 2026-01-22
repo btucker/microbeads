@@ -132,7 +132,7 @@ class TestGetPrefix:
     def test_get_prefix_default(self, tmp_path: Path):
         """Test default prefix when no metadata."""
         prefix = get_prefix(tmp_path)
-        assert prefix == "bd"
+        assert prefix == "mb"
 
 
 class TestBranchExists:

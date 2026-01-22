@@ -25,7 +25,71 @@ class Status(str, Enum):
     CLOSED = "closed"
 
 
-def generate_id(title: str, prefix: str = "bd", timestamp: datetime | None = None) -> str:
+# Validation constants
+MIN_PRIORITY = 0
+MAX_PRIORITY = 4
+
+
+class ValidationError(ValueError):
+    """Raised when input validation fails."""
+
+    pass
+
+
+def validate_title(title: str) -> str:
+    """Validate and normalize an issue title."""
+    if not isinstance(title, str):
+        raise ValidationError(f"Title must be a string, got {type(title).__name__}")
+    title = title.strip()
+    if not title:
+        raise ValidationError("Title cannot be empty")
+    if len(title) > 500:
+        raise ValidationError(f"Title too long ({len(title)} chars). Maximum is 500 characters")
+    return title
+
+
+def validate_priority(priority: int) -> int:
+    """Validate priority is in valid range (0-4)."""
+    if not isinstance(priority, int) or isinstance(priority, bool):
+        raise ValidationError(f"Priority must be an integer, got {type(priority).__name__}")
+    if priority < MIN_PRIORITY or priority > MAX_PRIORITY:
+        raise ValidationError(
+            f"Priority must be between {MIN_PRIORITY} and {MAX_PRIORITY}, got {priority}"
+        )
+    return priority
+
+
+def validate_labels(labels: list[str] | None) -> list[str]:
+    """Validate labels list."""
+    if labels is None:
+        return []
+    if not isinstance(labels, list):
+        raise ValidationError(f"Labels must be a list, got {type(labels).__name__}")
+    validated = []
+    for i, label in enumerate(labels):
+        if not isinstance(label, str):
+            raise ValidationError(
+                f"Label at index {i} must be a string, got {type(label).__name__}"
+            )
+        label = label.strip()
+        if not label:
+            raise ValidationError(f"Label at index {i} cannot be empty")
+        if len(label) > 100:
+            raise ValidationError(
+                f"Label at index {i} too long ({len(label)} chars). Maximum is 100 characters"
+            )
+        validated.append(label)
+    return validated
+
+
+def validate_description(description: str) -> str:
+    """Validate and normalize a description."""
+    if not isinstance(description, str):
+        raise ValidationError(f"Description must be a string, got {type(description).__name__}")
+    return description.strip()
+
+
+def generate_id(title: str, prefix: str = "mb", timestamp: datetime | None = None) -> str:
     """Generate a short issue ID based on title and timestamp."""
     if timestamp is None:
         timestamp = datetime.now(timezone.utc)
@@ -51,7 +115,25 @@ def create_issue(
     priority: int = 2,
     labels: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Create a new issue dictionary."""
+    """Create a new issue dictionary.
+
+    Args:
+        title: Issue title (required, non-empty)
+        worktree: Path to the worktree
+        description: Optional description
+        issue_type: Type of issue (bug, feature, task, epic, chore)
+        priority: Priority 0-4 (0=critical, 4=low)
+        labels: Optional list of labels
+
+    Raises:
+        ValidationError: If any input validation fails
+    """
+    # Validate inputs
+    title = validate_title(title)
+    description = validate_description(description)
+    priority = validate_priority(priority)
+    labels = validate_labels(labels)
+
     now = now_iso()
     prefix = repo.get_prefix(worktree)
     issue_id = generate_id(title, prefix)
@@ -63,7 +145,7 @@ def create_issue(
         "dependencies": [],
         "description": description,
         "id": issue_id,
-        "labels": labels or [],
+        "labels": labels,
         "priority": priority,
         "status": Status.OPEN.value,
         "title": title,
@@ -77,9 +159,29 @@ def issue_to_json(issue: dict[str, Any]) -> str:
     return json.dumps(issue, indent=2, sort_keys=True) + "\n"
 
 
+class CorruptedFileError(ValueError):
+    """Raised when a JSON file is corrupted and cannot be parsed."""
+
+    def __init__(self, path: Path, original_error: Exception):
+        self.path = path
+        self.original_error = original_error
+        super().__init__(f"Corrupted JSON file: {path} - {original_error}")
+
+
 def load_issue(path: Path) -> dict[str, Any]:
-    """Load an issue from a JSON file."""
-    return json.loads(path.read_text())
+    """Load an issue from a JSON file.
+
+    Raises:
+        CorruptedFileError: If the JSON file is corrupted
+        FileNotFoundError: If the file doesn't exist
+    """
+    try:
+        content = path.read_text()
+        if not content.strip():
+            raise CorruptedFileError(path, ValueError("File is empty"))
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        raise CorruptedFileError(path, e) from e
 
 
 def save_issue(worktree: Path, issue: dict[str, Any]) -> Path:
@@ -93,17 +195,29 @@ def save_issue(worktree: Path, issue: dict[str, Any]) -> Path:
 
 
 def get_issue(worktree: Path, issue_id: str) -> dict[str, Any] | None:
-    """Get an issue by ID."""
+    """Get an issue by ID.
+
+    Raises:
+        CorruptedFileError: If the exact match file exists but is corrupted
+
+    Returns:
+        Issue data, or None if not found. Skips corrupted files during partial matching.
+    """
     issues_dir = repo.get_issues_path(worktree)
     path = issues_dir / f"{issue_id}.json"
 
     if path.exists():
+        # Exact match - let CorruptedFileError propagate
         return load_issue(path)
 
-    # Try partial match
+    # Try partial match - skip corrupted files
     for p in issues_dir.glob("*.json"):
         if p.stem.startswith(issue_id) or issue_id in p.stem:
-            return load_issue(p)
+            try:
+                return load_issue(p)
+            except CorruptedFileError:
+                # Skip corrupted files during partial matching
+                continue
 
     return None
 
@@ -130,14 +244,34 @@ def resolve_issue_id(worktree: Path, issue_id: str) -> str | None:
     return None
 
 
-def load_all_issues(worktree: Path) -> dict[str, dict[str, Any]]:
-    """Load all issues into a dict keyed by ID. Single disk scan."""
+def load_all_issues(worktree: Path, skip_corrupted: bool = True) -> dict[str, dict[str, Any]]:
+    """Load all issues into a dict keyed by ID. Single disk scan.
+
+    Args:
+        worktree: Path to the worktree
+        skip_corrupted: If True, skip corrupted files silently.
+                       If False, raise CorruptedFileError on first corruption.
+
+    Returns:
+        Dictionary mapping issue IDs to issue data
+
+    Raises:
+        CorruptedFileError: If skip_corrupted is False and a file is corrupted
+    """
     issues_dir = repo.get_issues_path(worktree)
 
     if not issues_dir.exists():
         return {}
 
-    return {path.stem: load_issue(path) for path in issues_dir.glob("*.json")}
+    issues = {}
+    for path in issues_dir.glob("*.json"):
+        try:
+            issues[path.stem] = load_issue(path)
+        except CorruptedFileError:
+            if not skip_corrupted:
+                raise
+            # Silently skip corrupted files when skip_corrupted is True
+    return issues
 
 
 def list_issues(
@@ -182,7 +316,23 @@ def update_issue(
     add_labels: list[str] | None = None,
     remove_labels: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Update an issue's fields."""
+    """Update an issue's fields.
+
+    Args:
+        worktree: Path to the worktree
+        issue_id: Full or partial issue ID
+        status: New status (optional)
+        priority: New priority 0-4 (optional)
+        title: New title (optional)
+        description: New description (optional)
+        labels: Replace all labels (optional)
+        add_labels: Labels to add (optional)
+        remove_labels: Labels to remove (optional)
+
+    Raises:
+        ValidationError: If any input validation fails
+        ValueError: If issue not found
+    """
     full_id = resolve_issue_id(worktree, issue_id)
     if full_id is None:
         raise ValueError(f"Issue not found: {issue_id}")
@@ -191,20 +341,27 @@ def update_issue(
     if issue is None:
         raise ValueError(f"Issue not found: {issue_id}")
 
+    # Validate and apply updates
     if status is not None:
         issue["status"] = status.value
     if priority is not None:
+        priority = validate_priority(priority)
         issue["priority"] = priority
     if title is not None:
+        title = validate_title(title)
         issue["title"] = title
     if description is not None:
+        description = validate_description(description)
         issue["description"] = description
     if labels is not None:
+        labels = validate_labels(labels)
         issue["labels"] = labels
     if add_labels:
+        add_labels = validate_labels(add_labels)
         current = set(issue.get("labels", []))
         issue["labels"] = sorted(current | set(add_labels))
     if remove_labels:
+        remove_labels = validate_labels(remove_labels)
         current = set(issue.get("labels", []))
         issue["labels"] = sorted(current - set(remove_labels))
 
@@ -252,8 +409,49 @@ def reopen_issue(worktree: Path, issue_id: str) -> dict[str, Any]:
     return issue
 
 
+def would_create_cycle(
+    cache: dict[str, dict[str, Any]],
+    child_id: str,
+    parent_id: str,
+) -> bool:
+    """Check if adding child -> parent dependency would create a cycle.
+
+    Returns True if parent_id depends on child_id (directly or transitively).
+    """
+
+    def has_path_to(start_id: str, target_id: str, visited: set[str]) -> bool:
+        """Check if there's a dependency path from start to target."""
+        if start_id in visited:
+            return False
+        if start_id == target_id:
+            return True
+
+        visited.add(start_id)
+        issue = cache.get(start_id)
+        if not issue:
+            return False
+
+        for dep_id in issue.get("dependencies", []):
+            if has_path_to(dep_id, target_id, visited):
+                return True
+        return False
+
+    # Check if parent depends on child (which would create a cycle)
+    return has_path_to(parent_id, child_id, set())
+
+
 def add_dependency(worktree: Path, child_id: str, parent_id: str) -> dict[str, Any]:
-    """Add a dependency: child depends on (is blocked by) parent."""
+    """Add a dependency: child depends on (is blocked by) parent.
+
+    Args:
+        worktree: Path to the worktree
+        child_id: ID of the issue that depends on parent
+        parent_id: ID of the issue that blocks child
+
+    Raises:
+        ValidationError: If trying to add self-dependency or circular dependency
+        ValueError: If issue not found
+    """
     child_full = resolve_issue_id(worktree, child_id)
     parent_full = resolve_issue_id(worktree, parent_id)
 
@@ -262,14 +460,28 @@ def add_dependency(worktree: Path, child_id: str, parent_id: str) -> dict[str, A
     if parent_full is None:
         raise ValueError(f"Issue not found: {parent_id}")
 
-    child = get_issue(worktree, child_full)
+    # Prevent self-dependency
+    if child_full == parent_full:
+        raise ValidationError("An issue cannot depend on itself")
+
+    # Load all issues to check for circular dependencies
+    cache = load_all_issues(worktree)
+
+    child = cache.get(child_full)
     if child is None:
         raise ValueError(f"Issue not found: {child_id}")
 
     # Verify parent exists
-    parent = get_issue(worktree, parent_full)
+    parent = cache.get(parent_full)
     if parent is None:
         raise ValueError(f"Issue not found: {parent_id}")
+
+    # Check for circular dependency
+    if would_create_cycle(cache, child_full, parent_full):
+        raise ValidationError(
+            f"Adding this dependency would create a circular dependency: "
+            f"{parent_full} already depends on {child_full}"
+        )
 
     deps = set(child.get("dependencies", []))
     deps.add(parent_full)
