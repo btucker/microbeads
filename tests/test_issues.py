@@ -7,8 +7,10 @@ from pathlib import Path
 import pytest
 
 from microbeads.issues import (
+    CorruptedFileError,
     IssueType,
     Status,
+    ValidationError,
     _add_history_entry,
     add_dependency,
     close_issue,
@@ -32,6 +34,10 @@ from microbeads.issues import (
     run_doctor,
     save_issue,
     update_issue,
+    validate_description,
+    validate_labels,
+    validate_priority,
+    validate_title,
 )
 
 
@@ -42,8 +48,8 @@ class TestGenerateId:
         """Test ID generation with default prefix."""
         ts = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         issue_id = generate_id("Test Issue", timestamp=ts)
-        assert issue_id.startswith("bd-")
-        assert len(issue_id) == 11  # "bd-" + 8 hex chars
+        assert issue_id.startswith("mb-")
+        assert len(issue_id) == 11  # "mb-" + 8 hex chars
 
     def test_generate_id_custom_prefix(self):
         """Test ID generation with custom prefix."""
@@ -446,6 +452,387 @@ class TestReadyAndBlockedIssues:
         blocked = get_blocked_issues(mock_worktree)
         assert len(blocked) == 1
         assert blocked[0]["id"] == child["id"]
+
+
+class TestValidateTitle:
+    """Tests for title validation."""
+
+    def test_valid_title(self):
+        """Test that valid titles are accepted."""
+        assert validate_title("Fix the bug") == "Fix the bug"
+
+    def test_title_strips_whitespace(self):
+        """Test that titles are stripped of whitespace."""
+        assert validate_title("  padded title  ") == "padded title"
+
+    def test_empty_title_raises(self):
+        """Test that empty titles raise ValidationError."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            validate_title("")
+
+    def test_whitespace_only_title_raises(self):
+        """Test that whitespace-only titles raise ValidationError."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            validate_title("   ")
+
+    def test_title_too_long_raises(self):
+        """Test that titles over 500 chars raise ValidationError."""
+        with pytest.raises(ValidationError, match="too long"):
+            validate_title("x" * 501)
+
+    def test_title_non_string_raises(self):
+        """Test that non-string titles raise ValidationError."""
+        with pytest.raises(ValidationError, match="must be a string"):
+            validate_title(123)  # type: ignore
+
+
+class TestValidatePriority:
+    """Tests for priority validation."""
+
+    def test_valid_priorities(self):
+        """Test that valid priorities 0-4 are accepted."""
+        for p in range(5):
+            assert validate_priority(p) == p
+
+    def test_priority_too_low_raises(self):
+        """Test that negative priorities raise ValidationError."""
+        with pytest.raises(ValidationError, match="must be between"):
+            validate_priority(-1)
+
+    def test_priority_too_high_raises(self):
+        """Test that priorities above 4 raise ValidationError."""
+        with pytest.raises(ValidationError, match="must be between"):
+            validate_priority(5)
+
+    def test_priority_non_int_raises(self):
+        """Test that non-integer priorities raise ValidationError."""
+        with pytest.raises(ValidationError, match="must be an integer"):
+            validate_priority("high")  # type: ignore
+
+    def test_priority_bool_raises(self):
+        """Test that bool (subclass of int) raises ValidationError."""
+        with pytest.raises(ValidationError, match="must be an integer"):
+            validate_priority(True)  # type: ignore
+
+
+class TestValidateLabels:
+    """Tests for labels validation."""
+
+    def test_valid_labels(self):
+        """Test that valid labels are accepted."""
+        assert validate_labels(["frontend", "urgent"]) == ["frontend", "urgent"]
+
+    def test_labels_none_returns_empty(self):
+        """Test that None returns empty list."""
+        assert validate_labels(None) == []
+
+    def test_labels_strips_whitespace(self):
+        """Test that labels are stripped of whitespace."""
+        assert validate_labels(["  padded  "]) == ["padded"]
+
+    def test_empty_label_raises(self):
+        """Test that empty labels raise ValidationError."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            validate_labels(["valid", ""])
+
+    def test_label_too_long_raises(self):
+        """Test that labels over 100 chars raise ValidationError."""
+        with pytest.raises(ValidationError, match="too long"):
+            validate_labels(["x" * 101])
+
+    def test_labels_non_list_raises(self):
+        """Test that non-list labels raise ValidationError."""
+        with pytest.raises(ValidationError, match="must be a list"):
+            validate_labels("not-a-list")  # type: ignore
+
+    def test_label_non_string_raises(self):
+        """Test that non-string labels raise ValidationError."""
+        with pytest.raises(ValidationError, match="must be a string"):
+            validate_labels(["valid", 123])  # type: ignore
+
+
+class TestValidateDescription:
+    """Tests for description validation."""
+
+    def test_valid_description(self):
+        """Test that valid descriptions are accepted."""
+        assert validate_description("Some description") == "Some description"
+
+    def test_description_strips_whitespace(self):
+        """Test that descriptions are stripped of whitespace."""
+        assert validate_description("  padded  ") == "padded"
+
+    def test_description_non_string_raises(self):
+        """Test that non-string descriptions raise ValidationError."""
+        with pytest.raises(ValidationError, match="must be a string"):
+            validate_description(123)  # type: ignore
+
+
+class TestValidationInCreateIssue:
+    """Tests for validation in create_issue."""
+
+    def test_create_with_empty_title_raises(self, mock_worktree: Path):
+        """Test that creating with empty title raises ValidationError."""
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            create_issue("", mock_worktree)
+
+    def test_create_with_invalid_priority_raises(self, mock_worktree: Path):
+        """Test that creating with invalid priority raises ValidationError."""
+        with pytest.raises(ValidationError, match="must be between"):
+            create_issue("Valid Title", mock_worktree, priority=10)
+
+    def test_create_with_invalid_labels_raises(self, mock_worktree: Path):
+        """Test that creating with invalid labels raises ValidationError."""
+        with pytest.raises(ValidationError, match="must be a string"):
+            create_issue("Valid Title", mock_worktree, labels=[123])  # type: ignore
+
+
+class TestValidationInUpdateIssue:
+    """Tests for validation in update_issue."""
+
+    def test_update_with_empty_title_raises(self, mock_worktree: Path):
+        """Test that updating with empty title raises ValidationError."""
+        issue = create_issue("Original", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        with pytest.raises(ValidationError, match="cannot be empty"):
+            update_issue(mock_worktree, issue["id"], title="")
+
+    def test_update_with_invalid_priority_raises(self, mock_worktree: Path):
+        """Test that updating with invalid priority raises ValidationError."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        with pytest.raises(ValidationError, match="must be between"):
+            update_issue(mock_worktree, issue["id"], priority=99)
+
+
+class TestSelfDependencyValidation:
+    """Tests for self-dependency prevention."""
+
+    def test_self_dependency_raises(self, mock_worktree: Path):
+        """Test that adding self as dependency raises ValidationError."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        with pytest.raises(ValidationError, match="cannot depend on itself"):
+            add_dependency(mock_worktree, issue["id"], issue["id"])
+
+    def test_self_dependency_partial_id_raises(self, mock_worktree: Path):
+        """Test that self-dependency with partial ID raises ValidationError."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        # Use partial ID for both child and parent that resolve to the same issue
+        partial = issue["id"][:4]
+        with pytest.raises(ValidationError, match="cannot depend on itself"):
+            add_dependency(mock_worktree, partial, issue["id"])
+
+
+class TestCircularDependencyPrevention:
+    """Tests for circular dependency prevention."""
+
+    def test_direct_circular_dependency_raises(self, mock_worktree: Path):
+        """Test that A->B, B->A raises ValidationError."""
+        issue_a = create_issue("Issue A", mock_worktree)
+        issue_b = create_issue("Issue B", mock_worktree)
+        save_issue(mock_worktree, issue_a)
+        save_issue(mock_worktree, issue_b)
+
+        # A depends on B
+        add_dependency(mock_worktree, issue_a["id"], issue_b["id"])
+
+        # B depends on A should fail
+        with pytest.raises(ValidationError, match="circular dependency"):
+            add_dependency(mock_worktree, issue_b["id"], issue_a["id"])
+
+    def test_transitive_circular_dependency_raises(self, mock_worktree: Path):
+        """Test that A->B->C, C->A raises ValidationError."""
+        issue_a = create_issue("Issue A", mock_worktree)
+        issue_b = create_issue("Issue B", mock_worktree)
+        issue_c = create_issue("Issue C", mock_worktree)
+        save_issue(mock_worktree, issue_a)
+        save_issue(mock_worktree, issue_b)
+        save_issue(mock_worktree, issue_c)
+
+        # A depends on B
+        add_dependency(mock_worktree, issue_a["id"], issue_b["id"])
+        # B depends on C
+        add_dependency(mock_worktree, issue_b["id"], issue_c["id"])
+
+        # C depends on A should fail (would create C->A->B->C)
+        with pytest.raises(ValidationError, match="circular dependency"):
+            add_dependency(mock_worktree, issue_c["id"], issue_a["id"])
+
+    def test_long_chain_circular_dependency_raises(self, mock_worktree: Path):
+        """Test detection with longer dependency chains."""
+        issues = []
+        for i in range(5):
+            issue = create_issue(f"Issue {i}", mock_worktree)
+            save_issue(mock_worktree, issue)
+            issues.append(issue)
+
+        # Create chain: 0 -> 1 -> 2 -> 3 -> 4
+        for i in range(4):
+            add_dependency(mock_worktree, issues[i]["id"], issues[i + 1]["id"])
+
+        # 4 -> 0 should fail
+        with pytest.raises(ValidationError, match="circular dependency"):
+            add_dependency(mock_worktree, issues[4]["id"], issues[0]["id"])
+
+    def test_diamond_dependency_allowed(self, mock_worktree: Path):
+        """Test that diamond patterns (non-circular) are allowed."""
+        #     A
+        #    / \
+        #   B   C
+        #    \ /
+        #     D
+        issue_a = create_issue("Issue A", mock_worktree)
+        issue_b = create_issue("Issue B", mock_worktree)
+        issue_c = create_issue("Issue C", mock_worktree)
+        issue_d = create_issue("Issue D", mock_worktree)
+        save_issue(mock_worktree, issue_a)
+        save_issue(mock_worktree, issue_b)
+        save_issue(mock_worktree, issue_c)
+        save_issue(mock_worktree, issue_d)
+
+        # D depends on B and C
+        add_dependency(mock_worktree, issue_d["id"], issue_b["id"])
+        add_dependency(mock_worktree, issue_d["id"], issue_c["id"])
+
+        # B and C depend on A
+        add_dependency(mock_worktree, issue_b["id"], issue_a["id"])
+        add_dependency(mock_worktree, issue_c["id"], issue_a["id"])
+
+        # Verify D has both dependencies
+        d = get_issue(mock_worktree, issue_d["id"])
+        assert issue_b["id"] in d["dependencies"]
+        assert issue_c["id"] in d["dependencies"]
+
+    def test_existing_dependency_ok(self, mock_worktree: Path):
+        """Test that re-adding an existing dependency is OK."""
+        issue_a = create_issue("Issue A", mock_worktree)
+        issue_b = create_issue("Issue B", mock_worktree)
+        save_issue(mock_worktree, issue_a)
+        save_issue(mock_worktree, issue_b)
+
+        # A depends on B
+        add_dependency(mock_worktree, issue_a["id"], issue_b["id"])
+
+        # Adding the same dependency again should be fine
+        add_dependency(mock_worktree, issue_a["id"], issue_b["id"])
+
+        a = get_issue(mock_worktree, issue_a["id"])
+        assert issue_b["id"] in a["dependencies"]
+
+
+class TestJsonCorruptionHandling:
+    """Tests for JSON corruption handling."""
+
+    def test_load_issue_corrupted_json(self, mock_worktree: Path):
+        """Test that loading corrupted JSON raises CorruptedFileError."""
+        from microbeads import repo
+
+        issues_dir = repo.get_issues_path(mock_worktree)
+        corrupted_path = issues_dir / "corrupted-1234.json"
+        corrupted_path.write_text("{ invalid json")
+
+        with pytest.raises(CorruptedFileError) as exc_info:
+            load_issue(corrupted_path)
+
+        assert exc_info.value.path == corrupted_path
+        assert "JSONDecodeError" in str(type(exc_info.value.original_error).__name__)
+
+    def test_load_issue_empty_file(self, mock_worktree: Path):
+        """Test that loading empty file raises CorruptedFileError."""
+        from microbeads import repo
+
+        issues_dir = repo.get_issues_path(mock_worktree)
+        empty_path = issues_dir / "empty-1234.json"
+        empty_path.write_text("")
+
+        with pytest.raises(CorruptedFileError, match="empty"):
+            load_issue(empty_path)
+
+    def test_load_all_issues_skips_corrupted(self, mock_worktree: Path):
+        """Test that load_all_issues skips corrupted files by default."""
+        from microbeads import repo
+        from microbeads.issues import clear_cache
+
+        # Create valid issues
+        issue1 = create_issue("Valid Issue 1", mock_worktree)
+        issue2 = create_issue("Valid Issue 2", mock_worktree)
+        save_issue(mock_worktree, issue1)
+        save_issue(mock_worktree, issue2)
+
+        # Clear cache so we re-read from disk
+        clear_cache(mock_worktree)
+
+        # Create corrupted file in active directory
+        issues_dir = repo.get_active_issues_path(mock_worktree)
+        corrupted_path = issues_dir / "corrupted-1234.json"
+        corrupted_path.write_text("{ invalid json")
+
+        # Should load only valid issues
+        all_issues = load_all_issues(mock_worktree, skip_corrupted=True)
+        assert len(all_issues) == 2
+        assert issue1["id"] in all_issues
+        assert issue2["id"] in all_issues
+        assert "corrupted-1234" not in all_issues
+
+    def test_load_all_issues_raises_on_corrupted(self, mock_worktree: Path):
+        """Test that load_all_issues raises when skip_corrupted is False."""
+        from microbeads import repo
+        from microbeads.issues import clear_cache
+
+        # Create valid issue
+        issue = create_issue("Valid Issue", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        # Clear cache so we re-read from disk
+        clear_cache(mock_worktree)
+
+        # Create corrupted file in active directory
+        issues_dir = repo.get_active_issues_path(mock_worktree)
+        corrupted_path = issues_dir / "corrupted-1234.json"
+        corrupted_path.write_text("{ invalid json")
+
+        with pytest.raises(CorruptedFileError):
+            load_all_issues(mock_worktree, skip_corrupted=False)
+
+    def test_get_issue_with_corrupted_exact_match(self, mock_worktree: Path):
+        """Test that get_issue raises for corrupted exact match."""
+        from microbeads import repo
+
+        issues_dir = repo.get_active_issues_path(mock_worktree)
+        corrupted_path = issues_dir / "test-corrupted.json"
+        corrupted_path.write_text("not json at all")
+
+        with pytest.raises(CorruptedFileError):
+            get_issue(mock_worktree, "test-corrupted")
+
+    def test_get_issue_skips_corrupted_partial_match(self, mock_worktree: Path):
+        """Test that get_issue skips corrupted files during partial matching."""
+        from microbeads import repo
+
+        # Create valid issue with prefix "ab"
+        issue = create_issue("Valid Issue", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        # Create corrupted file with different ID but same prefix as we'll search
+        issues_dir = repo.get_active_issues_path(mock_worktree)
+        # The issue ID starts with "test-" (from mock_worktree prefix)
+        # Create a corrupted file that starts with "test-" too
+        corrupted_path = issues_dir / "test-aaacorrupt.json"
+        corrupted_path.write_text("corrupted")
+
+        # Search for partial ID should skip corrupted and find valid issue
+        # (Note: depends on glob order, but at minimum should not raise)
+        # Let's search for the valid issue specifically
+        partial = issue["id"][:4]
+        result = get_issue(mock_worktree, partial)
+        assert result is not None
+        assert result["id"] == issue["id"]
 
 
 class TestHistoryTracking:

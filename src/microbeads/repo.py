@@ -106,14 +106,23 @@ def derive_prefix(repo_root: Path) -> str:
 
 
 def get_prefix(worktree: Path) -> str:
-    """Get the issue ID prefix from metadata."""
+    """Get the issue ID prefix from metadata.
+
+    Returns the default prefix 'mb' if metadata.json is missing or corrupted.
+    """
     import json
 
     metadata_path = get_beads_path(worktree) / "metadata.json"
     if metadata_path.exists():
-        metadata = json.loads(metadata_path.read_text())
-        return metadata.get("id_prefix", "bd")
-    return "bd"
+        try:
+            content = metadata_path.read_text()
+            if content.strip():
+                metadata = json.loads(content)
+                return metadata.get("id_prefix", "mb")
+        except (json.JSONDecodeError, OSError):
+            # Return default prefix if metadata is corrupted or unreadable
+            pass
+    return "mb"
 
 
 def is_initialized(repo_root: Path) -> bool:
@@ -240,18 +249,19 @@ def init(repo_root: Path, stealth: bool = False, contributor_repo: str | None = 
 def configure_merge_driver(repo_root: Path) -> None:
     """Configure the JSON merge driver in git config."""
     cmd = get_command_name()
+    expected_driver = f"{cmd} merge-driver %O %A %B"
 
     # Check if already configured with correct command
     result = run_git("config", "--get", "merge.microbeads-json.driver", cwd=repo_root, check=False)
     if result.returncode == 0:
         current_driver = result.stdout.strip()
-        # Update if using old 'bd' command or if command changed
-        if not current_driver.startswith("bd ") and cmd in current_driver:
+        # Skip if already configured correctly
+        if current_driver == expected_driver:
             return
 
-    # Configure the merge driver
+    # Configure (or update) the merge driver
     run_git("config", "merge.microbeads-json.name", "Microbeads JSON merge driver", cwd=repo_root)
-    run_git("config", "merge.microbeads-json.driver", f"{cmd} merge-driver %O %A %B", cwd=repo_root)
+    run_git("config", "merge.microbeads-json.driver", expected_driver, cwd=repo_root)
 
 
 def ensure_worktree(repo_root: Path) -> Path:
@@ -355,25 +365,28 @@ def sync(repo_root: Path, message: str | None = None) -> None:
             session_id = branch.rsplit("-", 1)[-1]
             push_target = f"claude/{BRANCH_NAME}-{session_id}"
 
-    # Fetch and merge any existing microbeads branches to stay in sync
+    # Check for local changes and commit them FIRST
+    # This is important for proper merge behavior - we need local changes committed
+    # before pulling from remote so git can do a proper 3-way merge
+    result = run_git("status", "--porcelain", cwd=worktree)
+    has_local_changes = bool(result.stdout.strip())
+
+    if has_local_changes:
+        # Stage and commit local changes first
+        run_git("add", ".", cwd=worktree)
+        commit_msg = message or "Update issues"
+        run_git("commit", "-m", commit_msg, cwd=worktree)
+
+    # Now fetch and merge any existing microbeads branches to stay in sync
+    # With local changes committed, the merge driver can properly resolve conflicts
     # Skip remote sync in stealth mode
     stale_branches = []
     if not is_stealth:
-        # Do this BEFORE checking for local changes, so we always pull remote state
-        # Always sync, even when not in a Claude session (pass empty string as session_id)
         stale_branches = _sync_from_remote_microbeads(worktree, session_id or "")
 
-    # Check for changes
-    result = run_git("status", "--porcelain", cwd=worktree)
-    if not result.stdout.strip():
-        return  # No local changes to push
-
-    # Stage all changes
-    run_git("add", ".", cwd=worktree)
-
-    # Commit
-    commit_msg = message or "Update issues"
-    run_git("commit", "-m", commit_msg, cwd=worktree)
+    # If we didn't have local changes but pulled remote changes, we're done
+    if not has_local_changes:
+        return
 
     # Push (try to push, don't fail if remote doesn't exist or permission denied)
     # Skip push in stealth mode
