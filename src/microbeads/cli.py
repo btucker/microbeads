@@ -9,7 +9,7 @@ from typing import Any
 
 import click
 
-from . import get_command_name, issues, merge, repo
+from . import get_command_name, issues, repo
 
 # Condensed workflow instructions for Claude Code hooks
 PRIME_TEMPLATE = """# Microbeads Issue Tracking
@@ -738,6 +738,8 @@ def doctor(ctx: Context, fix: bool):
 @click.argument("theirs_path")
 def merge_driver(base_path: str, ours_path: str, theirs_path: str):
     """Git merge driver for JSON files (internal use)."""
+    from . import merge
+
     sys.exit(merge.merge_json_files(base_path, ours_path, theirs_path))
 
 
