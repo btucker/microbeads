@@ -237,9 +237,9 @@ def init(repo_root: Path, stealth: bool = False, contributor_repo: str | None = 
         gitattributes = worktree / ".gitattributes"
         gitattributes.write_text("*.json merge=microbeads-json\n")
 
-        # Initial commit
+        # Initial commit (skip pre-commit hooks - they're for main project, not microbeads data)
         run_git("add", ".", cwd=worktree)
-        run_git("commit", "-m", "Initialize microbeads", cwd=worktree)
+        run_git("commit", "--no-verify", "-m", "Initialize microbeads", cwd=worktree)
 
         # Push the new branch (skip in stealth mode)
         if not stealth:
@@ -385,9 +385,10 @@ def sync(repo_root: Path, message: str | None = None) -> None:
 
     if has_local_changes:
         # Stage and commit local changes first
+        # Skip pre-commit hooks - they're for main project, not microbeads data
         run_git("add", ".", cwd=worktree)
         commit_msg = message or "Update issues"
-        run_git("commit", "-m", commit_msg, cwd=worktree)
+        run_git("commit", "--no-verify", "-m", commit_msg, cwd=worktree)
 
     # Now fetch and merge any existing microbeads branches to stay in sync
     # With local changes committed, the merge driver can properly resolve conflicts
