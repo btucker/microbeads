@@ -6,11 +6,11 @@ A simplified git-backed issue tracker for AI agents. Issues are stored as indivi
 
 ```bash
 # Run directly with uvx (no install needed)
-uvx microbeads --help
+uvx microbeads init
 
 # Or install globally for the `mb` command
 uv tool install microbeads
-mb --help
+mb init
 ```
 
 After `uv tool install`, you get two commands: `mb` (short) and `microbeads` (full).
