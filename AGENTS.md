@@ -41,6 +41,11 @@ mb update bd-abc -s in_progress
 mb create "Found edge case" -p 2 -t bug
 mb dep add bd-new bd-existing
 
+# Exploration: file issues for anything worth addressing later
+# When exploring code, always create issues for improvements,
+# tech debt, or opportunities you notice - even if unrelated
+# to your current task. Don't let discoveries get lost.
+
 # End: close and sync
 mb close bd-abc -r "Implemented and tested"
 mb sync
