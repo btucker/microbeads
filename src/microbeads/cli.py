@@ -16,26 +16,25 @@ from . import issues, merge, repo
 # Condensed workflow instructions for Claude Code hooks
 PRIME_TEMPLATE = """# Microbeads Issue Tracking
 
-## Quick Commands
+**IMPORTANT:** Always create an issue for new user requests before starting work.
+Run `{cmd} ready` to check for existing issues first.
+
+## Workflow
+1. Check existing issues: `{cmd} ready`
+2. Create issue if new request: `{cmd} create "title" -p N -t type`
+3. Start work: `{cmd} update <id> -s in_progress`
+4. Complete work: `{cmd} close <id> -r "reason"`
+5. Sync: `{cmd} sync`
+
+## Commands
 ```
-{cmd} ready                         # See what to work on
+{cmd} ready                         # Issues ready to work on
+{cmd} create "title" -p N -t type   # Create issue (always do this!)
 {cmd} update <id> -s in_progress    # Start work
-{cmd} create "title" -p N -t type   # Create issue
 {cmd} close <id> -r "reason"        # Complete work
+{cmd} dep add <child> <parent>      # Add dependency
 {cmd} sync                          # Save to git
 ```
-
-## Dependencies
-```
-{cmd} dep add <child> <parent>      # child is blocked by parent
-{cmd} dep rm <child> <parent>       # remove dependency
-{cmd} blocked                       # show blocked issues
-```
-
-## Session End Protocol
-1. Close completed issues: `{cmd} close <id> -r "reason"`
-2. Create issues for remaining work
-3. Sync: `{cmd} sync && git push`
 
 ## Status: open | in_progress | blocked | closed
 ## Priority: P0 (critical) to P4 (low)
