@@ -13,26 +13,44 @@ from . import issues, merge, repo
 
 
 # Condensed workflow instructions for Claude Code hooks
-PRIME_CONTENT = """# Microbeads Issue Tracking
+PRIME_TEMPLATE = """# Microbeads Issue Tracking
 
 ## Quick Commands
 ```
-mb ready                         # See what to work on
-mb update <id> -s in_progress    # Start work
-mb create "title" -p N -t type   # Create issue
-mb close <id> -r "reason"        # Complete work
-mb sync                          # Save to git
+{cmd} ready                         # See what to work on
+{cmd} update <id> -s in_progress    # Start work
+{cmd} create "title" -p N -t type   # Create issue
+{cmd} close <id> -r "reason"        # Complete work
+{cmd} sync                          # Save to git
+```
+
+## Dependencies
+```
+{cmd} dep add <child> <parent>      # child is blocked by parent
+{cmd} dep rm <child> <parent>       # remove dependency
+{cmd} blocked                       # show blocked issues
 ```
 
 ## Session End Protocol
-1. Close completed issues: `mb close <id> -r "reason"`
+1. Close completed issues: `{cmd} close <id> -r "reason"`
 2. Create issues for remaining work
-3. Sync: `mb sync && git push`
+3. Sync: `{cmd} sync && git push`
 
 ## Status: open | in_progress | blocked | closed
 ## Priority: P0 (critical) to P4 (low)
 ## Types: bug | feature | task | epic | chore
 """
+
+
+def get_command_name() -> str:
+    """Get the command name based on how we were invoked."""
+    # Check argv[0] to see how we were called
+    if sys.argv and sys.argv[0]:
+        prog = Path(sys.argv[0]).name
+        if prog == "mb":
+            return "mb"
+    # Default to uvx microbeads for portability
+    return "uvx microbeads"
 
 
 class Context:
@@ -470,7 +488,8 @@ def prime():
     if custom_prime.exists():
         click.echo(custom_prime.read_text())
     else:
-        click.echo(PRIME_CONTENT)
+        cmd = get_command_name()
+        click.echo(PRIME_TEMPLATE.format(cmd=cmd))
 
 
 @main.group()
@@ -528,8 +547,9 @@ def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -
     # Get or create hooks section
     hooks = settings.setdefault("hooks", {})
 
-    # Add mb prime to SessionStart and PreCompact
-    command = "mb prime"
+    # Add uvx microbeads prime to SessionStart and PreCompact
+    # Using uvx ensures it works without global installation
+    command = "uvx microbeads prime"
     hook_entry = {
         "matcher": "",
         "hooks": [{"type": "command", "command": command}]
@@ -578,24 +598,25 @@ def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
         return
 
     hooks = settings.get("hooks", {})
-    command = "mb prime"
+    # Check for both old and new command formats
+    commands_to_remove = ["uvx microbeads prime", "mb prime"]
 
     for event in ["SessionStart", "PreCompact"]:
         event_hooks = hooks.get(event, [])
         if not isinstance(event_hooks, list):
             continue
 
-        # Filter out mb prime hooks
+        # Filter out microbeads prime hooks
         filtered = []
         removed = False
         for hook in event_hooks:
             if isinstance(hook, dict):
                 hook_commands = hook.get("hooks", [])
-                has_mb_prime = any(
-                    isinstance(h, dict) and h.get("command") == command
+                has_microbeads_prime = any(
+                    isinstance(h, dict) and h.get("command") in commands_to_remove
                     for h in hook_commands
                 )
-                if has_mb_prime:
+                if has_microbeads_prime:
                     removed = True
                     continue
             filtered.append(hook)
