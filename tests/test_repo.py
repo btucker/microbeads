@@ -7,20 +7,29 @@ import pytest
 
 from microbeads import _is_dogfooding, get_command_name
 from microbeads.repo import (
+    ACTIVE_ISSUES_DIR,
     BEADS_DIR,
+    CLOSED_ISSUES_DIR,
     ISSUES_DIR,
     WORKTREE_DIR,
     branch_exists,
+    configure_merge_driver,
     derive_prefix,
+    ensure_worktree,
     find_repo_root,
+    get_active_issues_path,
     get_beads_path,
+    get_closed_issues_path,
     get_git_common_dir,
     get_issues_path,
     get_mode,
     get_prefix,
     get_worktree_path,
+    init,
     is_initialized,
+    remote_branch_exists,
     run_git,
+    sync,
 )
 
 
@@ -134,7 +143,7 @@ class TestGetPrefix:
     def test_get_prefix_default(self, tmp_path: Path):
         """Test default prefix when no metadata."""
         prefix = get_prefix(tmp_path)
-        assert prefix == "bd"
+        assert prefix == "mb"
 
 
 class TestBranchExists:
@@ -231,6 +240,224 @@ class TestGetCommandName:
             with patch("microbeads.sys.argv", ["/some/script", "list"]):
                 with patch("shutil.which", return_value=None):
                     assert get_command_name() == "uvx microbeads"
+
+
+class TestActiveClosedPathHelpers:
+    """Tests for active/closed issues path helpers."""
+
+    def test_get_active_issues_path(self, tmp_path: Path):
+        """Test active issues path calculation."""
+        path = get_active_issues_path(tmp_path)
+        assert path == tmp_path / ACTIVE_ISSUES_DIR
+
+    def test_get_closed_issues_path(self, tmp_path: Path):
+        """Test closed issues path calculation."""
+        path = get_closed_issues_path(tmp_path)
+        assert path == tmp_path / CLOSED_ISSUES_DIR
+
+
+class TestGetPrefixEdgeCases:
+    """Tests for get_prefix edge cases."""
+
+    def test_get_prefix_corrupted_json(self, tmp_path: Path):
+        """Test default prefix when metadata is corrupted."""
+        beads_dir = tmp_path / BEADS_DIR
+        beads_dir.mkdir(parents=True)
+        metadata_path = beads_dir / "metadata.json"
+        metadata_path.write_text("{ invalid json")
+
+        prefix = get_prefix(tmp_path)
+        assert prefix == "mb"
+
+    def test_get_prefix_empty_metadata(self, tmp_path: Path):
+        """Test default prefix when metadata file is empty."""
+        beads_dir = tmp_path / BEADS_DIR
+        beads_dir.mkdir(parents=True)
+        metadata_path = beads_dir / "metadata.json"
+        metadata_path.write_text("")
+
+        prefix = get_prefix(tmp_path)
+        assert prefix == "mb"
+
+    def test_get_prefix_missing_id_prefix_key(self, tmp_path: Path):
+        """Test default prefix when id_prefix key is missing."""
+        import json
+
+        beads_dir = tmp_path / BEADS_DIR
+        beads_dir.mkdir(parents=True)
+        metadata_path = beads_dir / "metadata.json"
+        metadata_path.write_text(json.dumps({"version": "0.1.0"}))
+
+        prefix = get_prefix(tmp_path)
+        assert prefix == "mb"
+
+
+class TestRemoteBranchExists:
+    """Tests for remote branch existence check."""
+
+    def test_remote_branch_exists_no_remote(self, temp_git_repo: Path):
+        """Test remote_branch_exists when no remote configured."""
+        # No remote configured in temp repo
+        result = remote_branch_exists(temp_git_repo, "main")
+        assert result is False
+
+    def test_remote_branch_exists_nonexistent(self, temp_git_repo: Path):
+        """Test remote_branch_exists for nonexistent branch."""
+        result = remote_branch_exists(temp_git_repo, "nonexistent-branch")
+        assert result is False
+
+
+class TestFindRepoRootDefault:
+    """Tests for find_repo_root with default start path."""
+
+    def test_find_repo_root_default_start(self, temp_git_repo: Path, monkeypatch):
+        """Test find_repo_root uses cwd when start is None."""
+        monkeypatch.chdir(temp_git_repo)
+        root = find_repo_root()  # No start argument
+        assert root == temp_git_repo
+
+
+class TestInit:
+    """Tests for init function."""
+
+    def test_init_creates_orphan_branch(self, temp_git_repo: Path):
+        """Test that init creates the microbeads orphan branch."""
+        worktree = init(temp_git_repo)
+
+        # Verify worktree exists
+        assert worktree.exists()
+
+        # Verify microbeads directory structure
+        assert (worktree / BEADS_DIR).exists()
+        assert (worktree / ACTIVE_ISSUES_DIR).exists()
+        assert (worktree / CLOSED_ISSUES_DIR).exists()
+
+        # Verify metadata
+        metadata_path = worktree / BEADS_DIR / "metadata.json"
+        assert metadata_path.exists()
+
+        # Verify gitattributes
+        gitattributes = worktree / ".gitattributes"
+        assert gitattributes.exists()
+        assert "merge=microbeads-json" in gitattributes.read_text()
+
+    def test_init_idempotent(self, temp_git_repo: Path):
+        """Test that init is idempotent."""
+        worktree1 = init(temp_git_repo)
+        worktree2 = init(temp_git_repo)
+
+        assert worktree1 == worktree2
+
+    def test_init_existing_local_branch(self, temp_git_repo: Path):
+        """Test init with existing local microbeads branch."""
+        # First init creates the branch
+        worktree1 = init(temp_git_repo)
+
+        # Remove worktree but keep branch
+        import shutil
+
+        run_git("worktree", "remove", str(worktree1), cwd=temp_git_repo)
+        shutil.rmtree(worktree1, ignore_errors=True)
+
+        # Second init should recreate worktree from existing branch
+        worktree2 = init(temp_git_repo)
+        assert worktree2.exists()
+
+
+class TestConfigureMergeDriver:
+    """Tests for configure_merge_driver."""
+
+    def test_configure_merge_driver_sets_config(self, temp_git_repo: Path):
+        """Test that merge driver config is set."""
+        configure_merge_driver(temp_git_repo)
+
+        # Check config was set
+        result = run_git("config", "--get", "merge.microbeads-json.driver", cwd=temp_git_repo)
+        assert "merge-driver" in result.stdout
+
+    def test_configure_merge_driver_idempotent(self, temp_git_repo: Path):
+        """Test that configure is idempotent."""
+        configure_merge_driver(temp_git_repo)
+        configure_merge_driver(temp_git_repo)
+
+        result = run_git("config", "--get", "merge.microbeads-json.driver", cwd=temp_git_repo)
+        assert "merge-driver" in result.stdout
+
+
+class TestEnsureWorktree:
+    """Tests for ensure_worktree."""
+
+    def test_ensure_worktree_returns_existing(self, temp_git_repo: Path):
+        """Test ensure_worktree returns existing worktree."""
+        # Init first to create worktree
+        init(temp_git_repo)
+
+        worktree = ensure_worktree(temp_git_repo)
+        assert worktree.exists()
+
+    def test_ensure_worktree_not_initialized_raises(self, temp_git_repo: Path):
+        """Test ensure_worktree raises when not initialized."""
+        with pytest.raises(RuntimeError, match="not initialized"):
+            ensure_worktree(temp_git_repo)
+
+    def test_ensure_worktree_recreates_missing(self, temp_git_repo: Path):
+        """Test ensure_worktree recreates missing worktree from branch."""
+        # Init and then remove worktree
+        worktree = init(temp_git_repo)
+
+        import shutil
+
+        run_git("worktree", "remove", str(worktree), cwd=temp_git_repo)
+        shutil.rmtree(worktree, ignore_errors=True)
+
+        # Branch still exists, should recreate
+        new_worktree = ensure_worktree(temp_git_repo)
+        assert new_worktree.exists()
+
+
+class TestSync:
+    """Tests for sync function."""
+
+    def test_sync_no_changes(self, temp_git_repo: Path):
+        """Test sync with no local changes."""
+        init(temp_git_repo)
+
+        # Should not raise
+        sync(temp_git_repo)
+
+    def test_sync_with_local_changes(self, temp_git_repo: Path):
+        """Test sync commits local changes."""
+        import json
+
+        worktree = init(temp_git_repo)
+
+        # Create an issue file
+        active_dir = worktree / ACTIVE_ISSUES_DIR
+        issue = {"id": "test-1234", "title": "Test", "status": "open"}
+        (active_dir / "test-1234.json").write_text(json.dumps(issue))
+
+        sync(temp_git_repo, message="Add test issue")
+
+        # Verify committed
+        result = run_git("log", "--oneline", "-1", cwd=worktree)
+        assert "Add test issue" in result.stdout
+
+    def test_sync_default_message(self, temp_git_repo: Path):
+        """Test sync uses default commit message."""
+        import json
+
+        worktree = init(temp_git_repo)
+
+        # Create an issue file
+        active_dir = worktree / ACTIVE_ISSUES_DIR
+        issue = {"id": "test-5678", "title": "Test2", "status": "open"}
+        (active_dir / "test-5678.json").write_text(json.dumps(issue))
+
+        sync(temp_git_repo)
+
+        # Verify default message
+        result = run_git("log", "--oneline", "-1", cwd=worktree)
+        assert "Update issues" in result.stdout
 
 
 class TestGetGitCommonDir:
