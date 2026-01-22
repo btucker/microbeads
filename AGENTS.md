@@ -6,35 +6,35 @@ Microbeads is a simplified git-backed issue tracker designed for AI agents. Issu
 
 ```bash
 # Initialize (once per repo)
-bd init
+uvx microbeads init
 
 # Create issues
-bd create "Fix authentication bug" -p 1 -t bug -l backend
-bd create "Add user dashboard" -p 2 -t feature -d "Description here"
+uvx microbeads create "Fix authentication bug" -p 1 -t bug -l backend
+uvx microbeads create "Add user dashboard" -p 2 -t feature -d "Description here"
 
 # View issues
-bd list                          # All issues
-bd list -s open                  # Filter by status
-bd ready                         # Issues with no blockers
-bd blocked                       # Issues waiting on dependencies
-bd show bd-abc                   # Show issue details
+uvx microbeads list                          # All issues
+uvx microbeads list -s open                  # Filter by status
+uvx microbeads ready                         # Issues with no blockers
+uvx microbeads blocked                       # Issues waiting on dependencies
+uvx microbeads show bd-abc                   # Show issue details
 
 # Update issues
-bd update bd-abc -s in_progress  # Change status
-bd update bd-abc -p 1            # Change priority
-bd update bd-abc --add-label urgent
+uvx microbeads update bd-abc -s in_progress  # Change status
+uvx microbeads update bd-abc -p 1            # Change priority
+uvx microbeads update bd-abc --add-label urgent
 
 # Close/reopen
-bd close bd-abc -r "Completed"
-bd reopen bd-abc
+uvx microbeads close bd-abc -r "Completed"
+uvx microbeads reopen bd-abc
 
 # Dependencies
-bd dep add bd-child bd-parent    # child depends on parent
-bd dep rm bd-child bd-parent     # remove dependency
-bd dep tree bd-abc               # show dependency tree
+uvx microbeads dep add bd-child bd-parent    # child depends on parent
+uvx microbeads dep rm bd-child bd-parent     # remove dependency
+uvx microbeads dep tree bd-abc               # show dependency tree
 
 # Sync to remote
-bd sync                          # Commit and push to orphan branch
+uvx microbeads sync                          # Commit and push to orphan branch
 ```
 
 ## JSON Output Mode
@@ -42,10 +42,10 @@ bd sync                          # Commit and push to orphan branch
 **Always use `--json` for programmatic access:**
 
 ```bash
-bd --json list
-bd --json show bd-abc
-bd --json ready
-bd --json create "New issue" -p 2
+uvx microbeads --json list
+uvx microbeads --json show bd-abc
+uvx microbeads --json ready
+uvx microbeads --json create "New issue" -p 2
 ```
 
 JSON output provides structured data suitable for parsing and automation.
@@ -56,10 +56,10 @@ JSON output provides structured data suitable for parsing and automation.
 
 ```bash
 # 1. Check what's ready to work on
-bd ready
+uvx microbeads ready
 
 # 2. Pick an issue and mark it in progress
-bd update bd-abc -s in_progress
+uvx microbeads update bd-abc -s in_progress
 
 # 3. Do the work...
 ```
@@ -68,23 +68,23 @@ bd update bd-abc -s in_progress
 
 ```bash
 # Create issues for discovered work
-bd create "Found edge case in validation" -p 2 -t bug
+uvx microbeads create "Found edge case in validation" -p 2 -t bug
 
 # Add dependencies as you discover them
-bd dep add bd-new bd-existing
+uvx microbeads dep add bd-new bd-existing
 
 # Update status as work progresses
-bd update bd-abc -s in_progress
+uvx microbeads update bd-abc -s in_progress
 ```
 
 ### Ending a Session
 
 ```bash
 # Close completed work
-bd close bd-abc -r "Implemented and tested"
+uvx microbeads close bd-abc -r "Implemented and tested"
 
 # Sync issues to remote
-bd sync
+uvx microbeads sync
 ```
 
 ## Landing the Plane (Session Completion)
@@ -99,7 +99,7 @@ bd sync
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync                    # Commits issues to orphan branch
+   uvx microbeads sync        # Commits issues to orphan branch
    git push                   # Push your code branch
    git status                 # MUST show "up to date with origin"
    ```
@@ -170,7 +170,7 @@ This design means:
 | Feature | Reference Beads | Microbeads |
 |---------|----------------|------------|
 | Storage | SQLite + JSONL | JSON files |
-| Sync | Daemon + auto-export | `bd sync` manual |
+| Sync | Daemon + auto-export | `uvx microbeads sync` manual |
 | Branch | Configurable | Always `microbeads` orphan |
 | Merge | JSONL conflicts | JSON merge driver |
 | Features | Full (daemon, hooks, federation) | Core only |
