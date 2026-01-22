@@ -20,7 +20,9 @@ from microbeads.repo import (
     get_active_issues_path,
     get_beads_path,
     get_closed_issues_path,
+    get_git_common_dir,
     get_issues_path,
+    get_mode,
     get_prefix,
     get_worktree_path,
     init,
@@ -456,3 +458,75 @@ class TestSync:
         # Verify default message
         result = run_git("log", "--oneline", "-1", cwd=worktree)
         assert "Update issues" in result.stdout
+
+
+class TestGetGitCommonDir:
+    """Tests for git common directory detection (worktree support)."""
+
+    def test_get_git_common_dir_normal_repo(self, temp_git_repo: Path):
+        """Test that common dir is .git for normal repos."""
+        common = get_git_common_dir(temp_git_repo)
+        assert common == temp_git_repo / ".git"
+
+    def test_get_git_common_dir_returns_absolute(self, temp_git_repo: Path):
+        """Test that common dir path is always absolute."""
+        common = get_git_common_dir(temp_git_repo)
+        assert common.is_absolute()
+
+
+class TestStealthMode:
+    """Tests for stealth mode functionality."""
+
+    def test_get_mode_returns_stealth(self, mock_worktree: Path):
+        """Test that get_mode returns 'stealth' when metadata specifies it."""
+        import json
+
+        metadata_path = mock_worktree / ".microbeads" / "metadata.json"
+        metadata = {"version": "0.1.0", "id_prefix": "test", "mode": "stealth"}
+        metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
+
+        assert get_mode(mock_worktree) == "stealth"
+
+    def test_get_mode_returns_normal_default(self, mock_worktree: Path):
+        """Test that get_mode returns 'normal' when mode is not specified."""
+        # mock_worktree already has metadata without mode field
+        assert get_mode(mock_worktree) == "normal"
+
+    def test_get_mode_with_explicit_normal(self, mock_worktree: Path):
+        """Test that get_mode returns 'normal' when explicitly set."""
+        import json
+
+        metadata_path = mock_worktree / ".microbeads" / "metadata.json"
+        metadata = {"version": "0.1.0", "id_prefix": "test", "mode": "normal"}
+        metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
+
+        assert get_mode(mock_worktree) == "normal"
+
+
+class TestContributorMode:
+    """Tests for contributor mode functionality."""
+
+    def test_get_mode_returns_contributor(self, mock_worktree: Path):
+        """Test that get_mode returns 'contributor' when metadata specifies it."""
+        import json
+
+        metadata_path = mock_worktree / ".microbeads" / "metadata.json"
+        metadata = {
+            "version": "0.1.0",
+            "id_prefix": "test",
+            "mode": "contributor",
+            "contributor_repo": "/path/to/external/repo",
+        }
+        metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
+
+        assert get_mode(mock_worktree) == "contributor"
+
+
+class TestWorktreePath:
+    """Tests for worktree path calculation."""
+
+    def test_worktree_uses_common_dir(self, temp_git_repo: Path):
+        """Test that worktree path uses git common dir."""
+        worktree = get_worktree_path(temp_git_repo)
+        expected = temp_git_repo / ".git" / "microbeads-worktree"
+        assert worktree == expected

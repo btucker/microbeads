@@ -1248,3 +1248,240 @@ class TestMultiSessionSyncAndMerge:
                 assert title in found_titles, (
                     f"Session {i + 1} missing issue '{title}'. Found: {found_titles}"
                 )
+
+
+class TestAdditionalFields:
+    """E2E tests for additional issue fields (design, notes, acceptance_criteria)."""
+
+    def test_create_with_design_field(self, e2e_repo: Path):
+        """Test creating an issue with design field."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("create", "Feature", "--design", "Use singleton pattern", cwd=e2e_repo)
+        assert result.returncode == 0
+
+        result = run_mb("--json", "list", cwd=e2e_repo)
+        issues = json.loads(result.stdout)
+        assert issues[0]["design"] == "Use singleton pattern"
+
+    def test_create_with_notes_field(self, e2e_repo: Path):
+        """Test creating an issue with notes field."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("create", "Task", "--notes", "Consider edge cases", cwd=e2e_repo)
+        assert result.returncode == 0
+
+        result = run_mb("--json", "list", cwd=e2e_repo)
+        issues = json.loads(result.stdout)
+        assert issues[0]["notes"] == "Consider edge cases"
+
+    def test_create_with_acceptance_criteria(self, e2e_repo: Path):
+        """Test creating an issue with acceptance_criteria field."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb(
+            "create", "Feature", "--acceptance-criteria", "All tests pass", cwd=e2e_repo
+        )
+        assert result.returncode == 0
+
+        result = run_mb("--json", "list", cwd=e2e_repo)
+        issues = json.loads(result.stdout)
+        assert issues[0]["acceptance_criteria"] == "All tests pass"
+
+    def test_update_design_field(self, e2e_repo: Path):
+        """Test updating the design field."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("create", "Feature", cwd=e2e_repo)
+        issue_id = result.stdout.split()[1].rstrip(":")
+
+        run_mb("update", issue_id, "--design", "New architecture", cwd=e2e_repo)
+
+        result = run_mb("--json", "show", issue_id, cwd=e2e_repo)
+        issue = json.loads(result.stdout)
+        assert issue["design"] == "New architecture"
+
+    def test_show_displays_additional_fields(self, e2e_repo: Path):
+        """Test that show command displays additional fields."""
+        run_mb("init", cwd=e2e_repo)
+
+        run_mb(
+            "create",
+            "Feature",
+            "--design",
+            "Strategy pattern",
+            "--notes",
+            "Important note",
+            "--acceptance-criteria",
+            "Tests pass",
+            cwd=e2e_repo,
+        )
+
+        result = run_mb("list", cwd=e2e_repo)
+        # Get the issue id from list
+        result = run_mb("--json", "list", cwd=e2e_repo)
+        issues = json.loads(result.stdout)
+        issue_id = issues[0]["id"]
+
+        result = run_mb("show", issue_id, cwd=e2e_repo)
+        assert "Strategy pattern" in result.stdout
+        assert "Important note" in result.stdout
+        assert "Tests pass" in result.stdout
+
+
+class TestHistoryTracking:
+    """E2E tests for issue history tracking."""
+
+    def test_show_displays_history(self, e2e_repo: Path):
+        """Test that show command displays history."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("create", "Issue", "-p", "2", cwd=e2e_repo)
+        issue_id = result.stdout.split()[1].rstrip(":")
+
+        # Make some changes
+        run_mb("update", issue_id, "-p", "0", cwd=e2e_repo)
+        run_mb("update", issue_id, "-s", "in_progress", cwd=e2e_repo)
+
+        result = run_mb("show", issue_id, cwd=e2e_repo)
+        # Should show history section
+        assert "History" in result.stdout or "history" in result.stdout.lower()
+
+    def test_json_output_includes_history(self, e2e_repo: Path):
+        """Test that JSON output includes history."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("create", "Issue", cwd=e2e_repo)
+        issue_id = result.stdout.split()[1].rstrip(":")
+
+        run_mb("update", issue_id, "-s", "in_progress", cwd=e2e_repo)
+
+        result = run_mb("--json", "show", issue_id, cwd=e2e_repo)
+        issue = json.loads(result.stdout)
+
+        assert "history" in issue
+        assert len(issue["history"]) >= 1
+
+
+class TestDoctorCommand:
+    """E2E tests for the doctor command."""
+
+    def test_doctor_no_issues(self, e2e_repo: Path):
+        """Test doctor with no issues."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("doctor", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "0 issues" in result.stdout or "No problems" in result.stdout
+
+    def test_doctor_healthy_issues(self, e2e_repo: Path):
+        """Test doctor with healthy issues."""
+        run_mb("init", cwd=e2e_repo)
+        run_mb("create", "Issue 1", cwd=e2e_repo)
+        run_mb("create", "Issue 2", cwd=e2e_repo)
+
+        result = run_mb("doctor", cwd=e2e_repo)
+        assert result.returncode == 0
+        # Should report checking 2 issues
+        assert "2" in result.stdout
+
+    def test_doctor_with_fix_flag(self, e2e_repo: Path):
+        """Test doctor with --fix flag."""
+        run_mb("init", cwd=e2e_repo)
+        run_mb("create", "Issue", cwd=e2e_repo)
+
+        result = run_mb("doctor", "--fix", cwd=e2e_repo)
+        assert result.returncode == 0
+
+
+class TestCompactCommand:
+    """E2E tests for the compact command."""
+
+    def test_compact_no_closed_issues(self, e2e_repo: Path):
+        """Test compact with no closed issues."""
+        run_mb("init", cwd=e2e_repo)
+        run_mb("create", "Open Issue", cwd=e2e_repo)
+
+        result = run_mb("compact", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "0" in result.stdout or "No issues" in result.stdout
+
+    def test_compact_with_days_option(self, e2e_repo: Path):
+        """Test compact with --days option."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("compact", "--days", "30", cwd=e2e_repo)
+        assert result.returncode == 0
+
+
+class TestHooksCommand:
+    """E2E tests for the hooks install/remove commands."""
+
+    def test_hooks_install(self, e2e_repo: Path):
+        """Test installing git hooks."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("hooks", "install", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "installed" in result.stdout.lower() or "hooks" in result.stdout.lower()
+
+        # Verify git hooks were created
+        hooks_dir = e2e_repo / ".git" / "hooks"
+        assert (hooks_dir / "post-merge").exists()
+        assert (hooks_dir / "post-checkout").exists()
+        assert (hooks_dir / "pre-push").exists()
+
+    def test_hooks_install_specific(self, e2e_repo: Path):
+        """Test installing specific hooks only."""
+        run_mb("init", cwd=e2e_repo)
+
+        result = run_mb("hooks", "install", "--hook", "post-merge", cwd=e2e_repo)
+        assert result.returncode == 0
+
+        # Verify only post-merge was created
+        hooks_dir = e2e_repo / ".git" / "hooks"
+        assert (hooks_dir / "post-merge").exists()
+
+    def test_hooks_remove(self, e2e_repo: Path):
+        """Test removing hooks."""
+        run_mb("init", cwd=e2e_repo)
+
+        # First install
+        run_mb("hooks", "install", cwd=e2e_repo)
+
+        # Then remove
+        result = run_mb("hooks", "remove", cwd=e2e_repo)
+        assert result.returncode == 0
+
+
+class TestStealthMode:
+    """E2E tests for stealth mode."""
+
+    def test_init_with_stealth_flag(self, e2e_repo: Path):
+        """Test initializing with --stealth flag."""
+        result = run_mb("init", "--stealth", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "stealth" in result.stdout.lower() or "Microbeads initialized" in result.stdout
+
+    def test_stealth_mode_allows_create_and_list(self, e2e_repo: Path):
+        """Test that stealth mode allows normal issue operations."""
+        run_mb("init", "--stealth", cwd=e2e_repo)
+
+        result = run_mb("create", "Stealth Issue", cwd=e2e_repo)
+        assert result.returncode == 0
+
+        result = run_mb("list", cwd=e2e_repo)
+        assert result.returncode == 0
+        assert "Stealth Issue" in result.stdout
+
+
+class TestContributorMode:
+    """E2E tests for contributor mode."""
+
+    def test_init_with_contributor_flag(self, e2e_repo: Path, tmp_path: Path):
+        """Test initializing with --contributor flag."""
+        external_repo = tmp_path / "external"
+        external_repo.mkdir()
+
+        result = run_mb("init", "--contributor", str(external_repo), cwd=e2e_repo)
+        assert result.returncode == 0

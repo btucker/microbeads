@@ -37,9 +37,31 @@ def find_repo_root(start: Path | None = None) -> Path | None:
     return None
 
 
+def get_git_common_dir(repo_root: Path) -> Path:
+    """Get the common git directory (shared across worktrees).
+
+    For a regular repository, this returns .git
+    For a worktree, this returns the main repository's .git directory
+    """
+    result = run_git("rev-parse", "--git-common-dir", cwd=repo_root, check=False)
+    if result.returncode == 0:
+        common_dir = result.stdout.strip()
+        # --git-common-dir may return a relative path
+        if not Path(common_dir).is_absolute():
+            return (repo_root / common_dir).resolve()
+        return Path(common_dir)
+    # Fallback for older git versions
+    return repo_root / ".git"
+
+
 def get_worktree_path(repo_root: Path) -> Path:
-    """Get the path to the microbeads worktree."""
-    return repo_root / WORKTREE_DIR
+    """Get the path to the microbeads worktree.
+
+    Uses the common git directory to ensure all worktrees share the same
+    microbeads data.
+    """
+    git_common = get_git_common_dir(repo_root)
+    return git_common / "microbeads-worktree"
 
 
 def get_beads_path(worktree: Path) -> Path:
@@ -123,11 +145,30 @@ def remote_branch_exists(
     return result.returncode == 0 and branch in result.stdout
 
 
-def init(repo_root: Path) -> Path:
+def get_mode(worktree: Path) -> str:
+    """Get the microbeads mode from metadata.
+
+    Returns one of: 'normal', 'stealth', 'contributor'
+    """
+    import json
+
+    metadata_path = get_beads_path(worktree) / "metadata.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text())
+        return metadata.get("mode", "normal")
+    return "normal"
+
+
+def init(repo_root: Path, stealth: bool = False, contributor_repo: str | None = None) -> Path:
     """Initialize microbeads in the repository.
 
     Creates an orphan branch and sets up a worktree.
     Returns the path to the worktree.
+
+    Args:
+        repo_root: Path to the git repository root
+        stealth: If True, issues are local-only (not pushed to remote)
+        contributor_repo: Path to external repo for contributor mode
     """
     worktree = get_worktree_path(repo_root)
 
@@ -173,7 +214,10 @@ def init(repo_root: Path) -> Path:
         import json
 
         prefix = derive_prefix(repo_root)
-        metadata = {"version": "0.1.0", "id_prefix": prefix}
+        mode = "stealth" if stealth else ("contributor" if contributor_repo else "normal")
+        metadata = {"version": "0.1.0", "id_prefix": prefix, "mode": mode}
+        if contributor_repo:
+            metadata["contributor_repo"] = contributor_repo
         metadata_path = get_beads_path(worktree) / "metadata.json"
         metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
@@ -185,12 +229,16 @@ def init(repo_root: Path) -> Path:
         run_git("add", ".", cwd=worktree)
         run_git("commit", "-m", "Initialize microbeads", cwd=worktree)
 
-        # Push the new branch
-        result = run_git("push", "-u", "origin", BRANCH_NAME, cwd=worktree, check=False)
-        if result.returncode != 0 and "does not appear to be a git repository" not in result.stderr:
-            # Only raise if it's not a "no remote" error
-            if "403" not in result.stderr and "rejected" not in result.stderr:
-                raise RuntimeError(f"Push failed: {result.stderr}")
+        # Push the new branch (skip in stealth mode)
+        if not stealth:
+            result = run_git("push", "-u", "origin", BRANCH_NAME, cwd=worktree, check=False)
+            if (
+                result.returncode != 0
+                and "does not appear to be a git repository" not in result.stderr
+            ):
+                # Only raise if it's not a "no remote" error
+                if "403" not in result.stderr and "rejected" not in result.stderr:
+                    raise RuntimeError(f"Push failed: {result.stderr}")
 
     # Configure the JSON merge driver in the main repo
     configure_merge_driver(repo_root)
@@ -302,6 +350,10 @@ def sync(repo_root: Path, message: str | None = None) -> None:
     """Commit and push changes to the microbeads branch."""
     worktree = ensure_worktree(repo_root)
 
+    # Check mode - stealth mode skips remote operations
+    mode = get_mode(worktree)
+    is_stealth = mode == "stealth"
+
     # Determine push target - detect Claude Code web environment
     push_target = BRANCH_NAME
     session_id = None
@@ -327,34 +379,39 @@ def sync(repo_root: Path, message: str | None = None) -> None:
 
     # Now fetch and merge any existing microbeads branches to stay in sync
     # With local changes committed, the merge driver can properly resolve conflicts
-    stale_branches = _sync_from_remote_microbeads(worktree, session_id or "")
+    # Skip remote sync in stealth mode
+    stale_branches = []
+    if not is_stealth:
+        stale_branches = _sync_from_remote_microbeads(worktree, session_id or "")
 
     # If we didn't have local changes but pulled remote changes, we're done
     if not has_local_changes:
         return
 
     # Push (try to push, don't fail if remote doesn't exist or permission denied)
-    result = run_git(
-        "push", "-u", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree, check=False
-    )
+    # Skip push in stealth mode
     push_succeeded = False
-    if result.returncode != 0:
-        # Check if it's because remote doesn't exist or permission issue
-        if "does not appear to be a git repository" in result.stderr:
-            pass  # No remote configured, that's OK
-        elif "has no upstream branch" in result.stderr:
-            # First push, set upstream
-            run_git(
-                "push", "--set-upstream", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree
-            )
-            push_succeeded = True
-        elif "403" in result.stderr or "Permission denied" in result.stderr:
-            pass  # Permission issue, skip push silently
+    if not is_stealth:
+        result = run_git(
+            "push", "-u", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree, check=False
+        )
+        if result.returncode != 0:
+            # Check if it's because remote doesn't exist or permission issue
+            if "does not appear to be a git repository" in result.stderr:
+                pass  # No remote configured, that's OK
+            elif "has no upstream branch" in result.stderr:
+                # First push, set upstream
+                run_git(
+                    "push", "--set-upstream", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree
+                )
+                push_succeeded = True
+            elif "403" in result.stderr or "Permission denied" in result.stderr:
+                pass  # Permission issue, skip push silently
+            else:
+                raise RuntimeError(f"Push failed: {result.stderr}")
         else:
-            raise RuntimeError(f"Push failed: {result.stderr}")
-    else:
-        push_succeeded = True
+            push_succeeded = True
 
-    # Clean up stale branches after successful push
-    if push_succeeded and stale_branches:
-        _cleanup_stale_branches(worktree, stale_branches)
+        # Clean up stale branches after successful push
+        if push_succeeded and stale_branches:
+            _cleanup_stale_branches(worktree, stale_branches)

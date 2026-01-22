@@ -182,6 +182,9 @@ def create_issue(
     issue_type: IssueType = IssueType.TASK,
     priority: int = 2,
     labels: list[str] | None = None,
+    design: str = "",
+    notes: str = "",
+    acceptance_criteria: str = "",
 ) -> dict[str, Any]:
     """Create a new issue dictionary.
 
@@ -207,13 +210,16 @@ def create_issue(
     issue_id = generate_id(title, prefix)
 
     return {
+        "acceptance_criteria": acceptance_criteria,
         "closed_at": None,
         "closed_reason": None,
         "created_at": now,
         "dependencies": [],
         "description": description,
+        "design": design,
         "id": issue_id,
         "labels": labels,
+        "notes": notes,
         "priority": priority,
         "status": Status.OPEN.value,
         "title": title,
@@ -482,6 +488,26 @@ def list_issues(
     return issues
 
 
+def _add_history_entry(
+    issue: dict[str, Any],
+    field: str,
+    old_value: Any,
+    new_value: Any,
+    timestamp: str | None = None,
+) -> None:
+    """Add a history entry to an issue."""
+    if "history" not in issue:
+        issue["history"] = []
+
+    entry = {
+        "field": field,
+        "old": old_value,
+        "new": new_value,
+        "at": timestamp or now_iso(),
+    }
+    issue["history"].append(entry)
+
+
 def update_issue(
     worktree: Path,
     issue_id: str,
@@ -492,6 +518,9 @@ def update_issue(
     labels: list[str] | None = None,
     add_labels: list[str] | None = None,
     remove_labels: list[str] | None = None,
+    design: str | None = None,
+    notes: str | None = None,
+    acceptance_criteria: str | None = None,
 ) -> dict[str, Any]:
     """Update an issue's fields.
 
@@ -518,31 +547,58 @@ def update_issue(
     if issue is None:
         raise ValueError(f"Issue not found: {issue_id}")
 
-    # Validate and apply updates
-    if status is not None:
+    timestamp = now_iso()
+
+    # Validate and apply updates with history tracking
+    if status is not None and issue.get("status") != status.value:
+        _add_history_entry(issue, "status", issue.get("status"), status.value, timestamp)
         issue["status"] = status.value
     if priority is not None:
         priority = validate_priority(priority)
-        issue["priority"] = priority
+        if issue.get("priority") != priority:
+            _add_history_entry(issue, "priority", issue.get("priority"), priority, timestamp)
+            issue["priority"] = priority
     if title is not None:
         title = validate_title(title)
-        issue["title"] = title
+        if issue.get("title") != title:
+            _add_history_entry(issue, "title", issue.get("title"), title, timestamp)
+            issue["title"] = title
     if description is not None:
         description = validate_description(description)
-        issue["description"] = description
+        if issue.get("description") != description:
+            _add_history_entry(issue, "description", "(changed)", "(changed)", timestamp)
+            issue["description"] = description
     if labels is not None:
         labels = validate_labels(labels)
+        old_labels = issue.get("labels", [])
+        if sorted(old_labels) != sorted(labels):
+            _add_history_entry(issue, "labels", old_labels, labels, timestamp)
         issue["labels"] = labels
     if add_labels:
         add_labels = validate_labels(add_labels)
         current = set(issue.get("labels", []))
-        issue["labels"] = sorted(current | set(add_labels))
+        new_labels = sorted(current | set(add_labels))
+        if new_labels != sorted(current):
+            _add_history_entry(issue, "labels", sorted(current), new_labels, timestamp)
+        issue["labels"] = new_labels
     if remove_labels:
         remove_labels = validate_labels(remove_labels)
         current = set(issue.get("labels", []))
-        issue["labels"] = sorted(current - set(remove_labels))
+        new_labels = sorted(current - set(remove_labels))
+        if new_labels != sorted(current):
+            _add_history_entry(issue, "labels", sorted(current), new_labels, timestamp)
+        issue["labels"] = new_labels
+    if design is not None and issue.get("design") != design:
+        _add_history_entry(issue, "design", "(changed)", "(changed)", timestamp)
+        issue["design"] = design
+    if notes is not None and issue.get("notes") != notes:
+        _add_history_entry(issue, "notes", "(changed)", "(changed)", timestamp)
+        issue["notes"] = notes
+    if acceptance_criteria is not None and issue.get("acceptance_criteria") != acceptance_criteria:
+        _add_history_entry(issue, "acceptance_criteria", "(changed)", "(changed)", timestamp)
+        issue["acceptance_criteria"] = acceptance_criteria
 
-    issue["updated_at"] = now_iso()
+    issue["updated_at"] = timestamp
     save_issue(worktree, issue)
 
     return issue
@@ -564,10 +620,13 @@ def close_issue(worktree: Path, issue_id: str, reason: str = "") -> dict[str, An
         active_path.unlink()
         _remove_from_active_cache(worktree, full_id)
 
+    timestamp = now_iso()
+    _add_history_entry(issue, "status", issue.get("status"), Status.CLOSED.value, timestamp)
+
     issue["status"] = Status.CLOSED.value
-    issue["closed_at"] = now_iso()
+    issue["closed_at"] = timestamp
     issue["closed_reason"] = reason
-    issue["updated_at"] = now_iso()
+    issue["updated_at"] = timestamp
 
     # save_issue will save to closed directory since status is closed
     save_issue(worktree, issue)
@@ -590,10 +649,13 @@ def reopen_issue(worktree: Path, issue_id: str) -> dict[str, Any]:
         closed_path.unlink()
         _remove_from_closed_cache(worktree, full_id)
 
+    timestamp = now_iso()
+    _add_history_entry(issue, "status", issue.get("status"), Status.OPEN.value, timestamp)
+
     issue["status"] = Status.OPEN.value
     issue["closed_at"] = None
     issue["closed_reason"] = None
-    issue["updated_at"] = now_iso()
+    issue["updated_at"] = timestamp
 
     # save_issue will save to active directory since status is open
     save_issue(worktree, issue)
@@ -834,6 +896,137 @@ def build_dependency_tree(
     return tree
 
 
+def _detect_cycle(
+    issue_id: str,
+    all_issues: dict[str, dict[str, Any]],
+    visited: set[str],
+    rec_stack: set[str],
+) -> list[str] | None:
+    """Detect if there's a cycle starting from issue_id. Returns cycle path if found."""
+    visited.add(issue_id)
+    rec_stack.add(issue_id)
+
+    issue = all_issues.get(issue_id)
+    if issue:
+        for dep_id in issue.get("dependencies", []):
+            if dep_id not in visited:
+                cycle = _detect_cycle(dep_id, all_issues, visited, rec_stack)
+                if cycle is not None:
+                    return cycle
+            elif dep_id in rec_stack:
+                # Found a cycle
+                return [issue_id, dep_id]
+
+    rec_stack.discard(issue_id)
+    return None
+
+
+def run_doctor(
+    worktree: Path,
+    fix: bool = False,
+) -> dict[str, Any]:
+    """Run health checks on issues and optionally fix problems.
+
+    Checks for:
+    - Orphaned dependencies (references to non-existent issues)
+    - Stale blocked status (marked blocked but no open blockers)
+    - Dependency cycles
+    - Invalid field values
+
+    Returns a dict with 'problems' list and 'fixed' list.
+    """
+    all_issues = load_all_issues(worktree)
+    problems: list[dict[str, Any]] = []
+    fixed: list[dict[str, Any]] = []
+
+    valid_statuses = {s.value for s in Status}
+    valid_types = {t.value for t in IssueType}
+
+    for issue_id, issue in all_issues.items():
+        issue_problems: list[str] = []
+        issue_fixes: list[str] = []
+
+        # Check for orphaned dependencies
+        orphaned_deps = []
+        for dep_id in issue.get("dependencies", []):
+            if dep_id not in all_issues:
+                orphaned_deps.append(dep_id)
+                issue_problems.append(f"orphaned dependency: {dep_id}")
+
+        if orphaned_deps and fix:
+            current_deps = set(issue.get("dependencies", []))
+            issue["dependencies"] = sorted(current_deps - set(orphaned_deps))
+            issue["updated_at"] = now_iso()
+            save_issue(worktree, issue)
+            issue_fixes.append(f"removed orphaned dependencies: {', '.join(orphaned_deps)}")
+
+        # Check for stale blocked status
+        if issue.get("status") == Status.BLOCKED.value:
+            open_blockers = get_open_blockers(issue, all_issues)
+            if not open_blockers:
+                issue_problems.append("marked blocked but has no open blockers")
+                if fix:
+                    issue["status"] = Status.OPEN.value
+                    issue["updated_at"] = now_iso()
+                    save_issue(worktree, issue)
+                    issue_fixes.append("changed status from blocked to open")
+
+        # Check for invalid status
+        status = issue.get("status")
+        if status and status not in valid_statuses:
+            issue_problems.append(f"invalid status: {status}")
+            if fix:
+                issue["status"] = Status.OPEN.value
+                issue["updated_at"] = now_iso()
+                save_issue(worktree, issue)
+                issue_fixes.append("reset status to open")
+
+        # Check for invalid type
+        issue_type = issue.get("type")
+        if issue_type and issue_type not in valid_types:
+            issue_problems.append(f"invalid type: {issue_type}")
+            if fix:
+                issue["type"] = IssueType.TASK.value
+                issue["updated_at"] = now_iso()
+                save_issue(worktree, issue)
+                issue_fixes.append("reset type to task")
+
+        # Check for invalid priority
+        priority = issue.get("priority")
+        if priority is not None and (not isinstance(priority, int) or priority < 0 or priority > 4):
+            issue_problems.append(f"invalid priority: {priority}")
+            if fix:
+                issue["priority"] = 2
+                issue["updated_at"] = now_iso()
+                save_issue(worktree, issue)
+                issue_fixes.append("reset priority to 2")
+
+        if issue_problems:
+            problems.append({"id": issue_id, "title": issue["title"], "problems": issue_problems})
+        if issue_fixes:
+            fixed.append({"id": issue_id, "fixes": issue_fixes})
+
+    # Check for dependency cycles (separate pass)
+    visited: set[str] = set()
+    for issue_id in all_issues:
+        if issue_id not in visited:
+            cycle = _detect_cycle(issue_id, all_issues, visited, set())
+            if cycle:
+                problems.append(
+                    {
+                        "id": cycle[0],
+                        "title": all_issues[cycle[0]]["title"],
+                        "problems": [f"dependency cycle detected: {cycle[0]} -> {cycle[1]}"],
+                    }
+                )
+
+    return {
+        "problems": problems,
+        "fixed": fixed,
+        "total_issues": len(all_issues),
+    }
+
+
 def migrate_flat_to_status_dirs(worktree: Path) -> int:
     """Migrate issues from flat structure to active/closed directories.
 
@@ -872,3 +1065,92 @@ def migrate_flat_to_status_dirs(worktree: Path) -> int:
     clear_cache(worktree)
 
     return migrated
+
+
+def compact_issue(issue: dict[str, Any]) -> dict[str, Any]:
+    """Create a compacted version of an issue for memory efficiency.
+
+    Keeps essential fields and removes verbose data like full description.
+    Only compacts closed issues.
+    """
+    if issue.get("status") != Status.CLOSED.value:
+        return issue
+
+    # Extract first line of description as summary
+    description = issue.get("description", "")
+    summary = description.split("\n")[0][:100] if description else ""
+
+    compacted = {
+        "id": issue["id"],
+        "title": issue["title"],
+        "status": Status.CLOSED.value,
+        "type": issue.get("type", IssueType.TASK.value),
+        "priority": issue.get("priority", 2),
+        "closed_at": issue.get("closed_at"),
+        "closed_reason": issue.get("closed_reason", ""),
+        "compacted": True,
+    }
+
+    # Keep summary if description was present
+    if summary:
+        compacted["summary"] = summary
+
+    # Keep dependency count for reference
+    deps = issue.get("dependencies", [])
+    if deps:
+        compacted["dependency_count"] = len(deps)
+
+    # Keep label count
+    labels = issue.get("labels", [])
+    if labels:
+        compacted["label_count"] = len(labels)
+
+    return compacted
+
+
+def compact_closed_issues(
+    worktree: Path,
+    older_than_days: int = 7,
+) -> dict[str, Any]:
+    """Compact closed issues older than specified days.
+
+    Returns dict with 'compacted' list and 'skipped' count.
+    """
+    from datetime import datetime, timedelta
+
+    all_issues = load_all_issues(worktree)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+
+    compacted_list: list[dict[str, Any]] = []
+    skipped = 0
+
+    for issue_id, issue in all_issues.items():
+        # Skip non-closed issues
+        if issue.get("status") != Status.CLOSED.value:
+            continue
+
+        # Skip already compacted
+        if issue.get("compacted"):
+            skipped += 1
+            continue
+
+        # Check if closed_at is old enough
+        closed_at = issue.get("closed_at")
+        if closed_at:
+            try:
+                closed_dt = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+                if closed_dt > cutoff:
+                    skipped += 1
+                    continue
+            except (ValueError, TypeError):
+                pass  # If we can't parse, compact it
+
+        # Compact the issue
+        compacted = compact_issue(issue)
+        save_issue(worktree, compacted)
+        compacted_list.append({"id": issue_id, "title": issue["title"]})
+
+    return {
+        "compacted": compacted_list,
+        "skipped": skipped,
+    }
