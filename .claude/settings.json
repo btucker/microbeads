@@ -7,10 +7,6 @@
           {
             "type": "command",
             "command": "uv run mb prime"
-          },
-          {
-            "type": "command",
-            "command": "uv run mb sync"
           }
         ]
       }
@@ -22,10 +18,6 @@
           {
             "type": "command",
             "command": "uv run mb prime"
-          },
-          {
-            "type": "command",
-            "command": "uv run mb sync"
           }
         ]
       }
