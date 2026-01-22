@@ -84,6 +84,18 @@ def get_closed_issues_path(worktree: Path) -> Path:
     return worktree / CLOSED_ISSUES_DIR
 
 
+def get_cache_dir(repo_root: Path) -> Path:
+    """Get the path to the cache directory (not committed to git).
+
+    Cache is stored in .git/microbeads-cache/ which is:
+    - Automatically ignored by git (inside .git/)
+    - Specific to this machine/checkout
+    - Won't interfere with the worktree contents
+    """
+    git_common = get_git_common_dir(repo_root)
+    return git_common / "microbeads-cache"
+
+
 def derive_prefix(repo_root: Path) -> str:
     """Derive an issue ID prefix from the repository name.
 

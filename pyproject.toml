@@ -9,6 +9,7 @@ description = "A simplified git-backed issue tracker for AI agents"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.0",
+    "orjson>=3.9",
 ]
 
 [project.optional-dependencies]
