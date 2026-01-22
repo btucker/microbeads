@@ -1,17 +1,11 @@
 {
   "closed_at": "2026-01-22T07:38:19Z",
   "closed_reason": "Added performance tests for 10k+ issues with dependencies and benchmark vs bd",
-  "created_at": "2026-01-22T07:11:51Z",
-  "dependencies": [],
-  "description": "",
+  "compacted": true,
   "id": "bd-2149",
-  "labels": [
-    "testing",
-    "performance"
-  ],
+  "label_count": 2,
   "priority": 1,
   "status": "closed",
   "title": "Performance test: verify scalability with 1000+ issues",
-  "type": "task",
-  "updated_at": "2026-01-22T07:38:19Z"
+  "type": "task"
 }

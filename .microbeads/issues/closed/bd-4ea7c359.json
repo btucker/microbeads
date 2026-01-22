@@ -1,0 +1,37 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T11:27:37Z",
+  "closed_reason": "Testing complete",
+  "created_at": "2026-01-22T11:27:27Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T11:27:37Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-22T11:27:37Z",
+      "field": "priority",
+      "new": 2,
+      "old": 3
+    },
+    {
+      "at": "2026-01-22T11:27:37Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "bd-4ea7c359",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "closed",
+  "title": "Test history",
+  "type": "task",
+  "updated_at": "2026-01-22T11:27:37Z"
+}
