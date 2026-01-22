@@ -120,7 +120,7 @@ mb sync    # Commit and push to orphan branch
 ```bash
 mb doctor              # Check for issues (orphan deps, cycles, missing files)
 mb doctor --fix        # Auto-fix problems where possible
-mb compact             # Compress old closed issues (removes history/metadata)
+mb compact             # Summarize old closed issues (uses LLM if ANTHROPIC_API_KEY set)
 mb compact --days 30   # Only compact issues closed >30 days ago (default: 7)
 ```
 

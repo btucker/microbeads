@@ -711,14 +711,12 @@ class TestCompactCommand:
         assert "history" not in compacted
         assert "design" not in compacted
         assert "notes" not in compacted
-        assert "labels" not in compacted
         assert "dependencies" not in compacted
 
-        # Counts preserved
-        assert compacted["label_count"] == 2
-        assert compacted["dependency_count"] == 2
+        # Labels preserved (useful for searching)
+        assert compacted["labels"] == ["frontend", "urgent"]
 
-        # Summary from first line of description
+        # Summary from first line of description (LLM fallback)
         assert compacted["summary"] == "Long description"
 
     def test_compact_issue_skips_open(self):

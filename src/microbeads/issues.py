@@ -961,18 +961,86 @@ def migrate_flat_to_status_dirs(worktree: Path) -> int:
     return migrated
 
 
-def compact_issue(issue: dict[str, Any]) -> dict[str, Any]:
-    """Create a compacted version of an issue for memory efficiency.
+def _generate_semantic_summary(issue: dict[str, Any]) -> str | None:
+    """Generate a semantic summary of an issue using Claude.
 
-    Keeps essential fields and removes verbose data like full description.
+    Returns None if the API is unavailable or fails.
+    """
+    import os
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+
+        # Build issue context for summarization
+        parts = [f"Title: {issue.get('title', 'Untitled')}"]
+        if issue.get("description"):
+            parts.append(f"Description: {issue['description']}")
+        if issue.get("design"):
+            parts.append(f"Design: {issue['design']}")
+        if issue.get("notes"):
+            parts.append(f"Notes: {issue['notes']}")
+        if issue.get("acceptance_criteria"):
+            parts.append(f"Acceptance Criteria: {issue['acceptance_criteria']}")
+        if issue.get("closed_reason"):
+            parts.append(f"Resolution: {issue['closed_reason']}")
+        if issue.get("history"):
+            history_summary = ", ".join(
+                f"{h.get('action', 'update')}" for h in issue["history"][-5:]
+            )
+            parts.append(f"Recent history: {history_summary}")
+
+        issue_text = "\n".join(parts)
+
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=150,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"""Summarize this completed issue in 1-2 sentences. Focus on what was done and why it matters. Be concise.
+
+{issue_text}""",
+                }
+            ],
+        )
+
+        if message.content and len(message.content) > 0:
+            return message.content[0].text.strip()
+    except Exception:
+        pass  # Fall back to simple summary
+
+    return None
+
+
+def compact_issue(issue: dict[str, Any], use_llm: bool = True) -> dict[str, Any]:
+    """Create a compacted version of an issue using semantic summarization.
+
+    Uses Claude to generate a concise summary of the issue content,
+    preserving essential context while reducing storage size.
     Only compacts closed issues.
+
+    Args:
+        issue: The issue to compact
+        use_llm: If True, attempt LLM summarization. Falls back to truncation if unavailable.
     """
     if issue.get("status") != Status.CLOSED.value:
         return issue
 
-    # Extract first line of description as summary
-    description = issue.get("description", "")
-    summary = description.split("\n")[0][:100] if description else ""
+    # Try semantic summarization first
+    summary = None
+    if use_llm:
+        summary = _generate_semantic_summary(issue)
+
+    # Fall back to simple truncation
+    if not summary:
+        description = issue.get("description", "")
+        summary = description.split("\n")[0][:100] if description else ""
 
     compacted = {
         "id": issue["id"],
@@ -985,19 +1053,14 @@ def compact_issue(issue: dict[str, Any]) -> dict[str, Any]:
         "compacted": True,
     }
 
-    # Keep summary if description was present
+    # Keep summary
     if summary:
         compacted["summary"] = summary
 
-    # Keep dependency count for reference
-    deps = issue.get("dependencies", [])
-    if deps:
-        compacted["dependency_count"] = len(deps)
-
-    # Keep label count
+    # Keep labels (useful for searching)
     labels = issue.get("labels", [])
     if labels:
-        compacted["label_count"] = len(labels)
+        compacted["labels"] = labels
 
     return compacted
 
