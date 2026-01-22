@@ -1,6 +1,6 @@
 {
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-22T10:25:21Z",
+  "closed_reason": "Added ValidationError class and validation functions for title (non-empty, max 500 chars), priority (0-4 range), labels (list of strings, max 100 chars each), description. Also added self-dependency prevention in add_dependency. Updated CLI to handle ValidationError properly.",
   "created_at": "2026-01-22T06:06:37Z",
   "dependencies": [],
   "description": "API functions don't validate: status enum values, priority range, type enum, self-dependency. CLI validates but direct API calls bypass.",
@@ -9,8 +9,8 @@
     "validation"
   ],
   "priority": 2,
-  "status": "open",
+  "status": "closed",
   "title": "Add input validation for API functions",
   "type": "bug",
-  "updated_at": "2026-01-22T06:06:37Z"
+  "updated_at": "2026-01-22T10:25:21Z"
 }
