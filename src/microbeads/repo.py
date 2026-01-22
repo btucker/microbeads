@@ -260,18 +260,6 @@ def sync(repo_root: Path, message: str | None = None) -> None:
     """Commit and push changes to the microbeads branch."""
     worktree = ensure_worktree(repo_root)
 
-    # Check for changes
-    result = run_git("status", "--porcelain", cwd=worktree)
-    if not result.stdout.strip():
-        return  # No changes
-
-    # Stage all changes
-    run_git("add", ".", cwd=worktree)
-
-    # Commit
-    commit_msg = message or "Update issues"
-    run_git("commit", "-m", commit_msg, cwd=worktree)
-
     # Determine push target - detect Claude Code web environment
     push_target = BRANCH_NAME
     session_id = None
@@ -284,9 +272,22 @@ def sync(repo_root: Path, message: str | None = None) -> None:
             push_target = f"claude/{BRANCH_NAME}-{session_id}"
 
     # Fetch and merge any existing microbeads branches to stay in sync
+    # Do this BEFORE checking for local changes, so we always pull remote state
     stale_branches = []
     if session_id:
         stale_branches = _sync_from_remote_microbeads(worktree, session_id)
+
+    # Check for changes
+    result = run_git("status", "--porcelain", cwd=worktree)
+    if not result.stdout.strip():
+        return  # No local changes to push
+
+    # Stage all changes
+    run_git("add", ".", cwd=worktree)
+
+    # Commit
+    commit_msg = message or "Update issues"
+    run_git("commit", "-m", commit_msg, cwd=worktree)
 
     # Push (try to push, don't fail if remote doesn't exist or permission denied)
     result = run_git(
