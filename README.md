@@ -5,8 +5,8 @@ A simplified git-backed issue tracker for AI agents. Issues are stored as indivi
 ## Installation
 
 ```bash
-# Run directly with uvx (no install needed)
-uvx microbeads --help
+# Run from within repo directly with uvx (no install needed)
+uvx microbeads init
 
 # Or install globally for the `mb` command
 uv tool install microbeads
@@ -25,6 +25,7 @@ mb init
 ```
 
 This creates:
+
 - An orphan branch named `microbeads` for issue storage
 - A git worktree at `.git/microbeads-worktree/`
 - A JSON merge driver for automatic conflict resolution
@@ -127,6 +128,7 @@ Unlike the reference beads implementation (SQLite + JSONL), microbeads stores ea
 ```
 
 Benefits:
+
 - **No database** - Just JSON files, easy to inspect and debug
 - **Git-native** - Issues sync with normal git operations
 - **Merge-friendly** - Custom merge driver handles conflicts automatically
@@ -202,6 +204,7 @@ This adds `SessionStart` and `PreCompact` hooks that run `mb prime` to remind th
 ## For AI Agents
 
 See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
+
 - Session workflow
 - JSON output mode
 - Landing the plane (session completion checklist)
