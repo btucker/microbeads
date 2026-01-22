@@ -32,11 +32,16 @@ Run `{cmd} ready` to check for existing issues first.
 {cmd} close <id> -r "reason"        # Complete work
 {cmd} dep add <child> <parent>      # Add dependency
 {cmd} sync                          # Save to git
+{cmd} doctor                        # Check for problems
+{cmd} compact                       # Compress old closed issues
 ```
 
 ## Status: open | in_progress | blocked | closed
 ## Priority: P0 (critical) to P4 (low)
 ## Types: bug | feature | task | epic | chore
+
+## Additional Fields (optional)
+--design "approach" --notes "context" --acceptance-criteria "done when..."
 """
 
 
@@ -110,6 +115,15 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
     if issue.get("description"):
         lines.append(f"Description: {issue['description']}")
 
+    if issue.get("design"):
+        lines.append(f"Design:      {issue['design']}")
+
+    if issue.get("notes"):
+        lines.append(f"Notes:       {issue['notes']}")
+
+    if issue.get("acceptance_criteria"):
+        lines.append(f"Acceptance:  {issue['acceptance_criteria']}")
+
     if issue.get("dependencies"):
         lines.append(f"Depends on:  {', '.join(issue['dependencies'])}")
 
@@ -120,6 +134,23 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
         lines.append(f"Closed:      {issue['closed_at']}")
         if issue.get("closed_reason"):
             lines.append(f"Reason:      {issue['closed_reason']}")
+
+    # Show if compacted
+    if issue.get("compacted"):
+        lines.append("(compacted)")
+
+    # Show history if present
+    history = issue.get("history", [])
+    if history:
+        lines.append("\nHistory:")
+        for entry in history[-10:]:  # Show last 10 entries
+            field = entry.get("field", "?")
+            old_val = entry.get("old", "?")
+            new_val = entry.get("new", "?")
+            at = entry.get("at", "?")
+            lines.append(f"  {at}: {field}: {old_val} -> {new_val}")
+        if len(history) > 10:
+            lines.append(f"  ... and {len(history) - 10} more entries")
 
     return "\n".join(lines)
 
@@ -284,10 +315,25 @@ def update_agents_md(repo_root: Path, json_output: bool = False) -> bool:
 
 @main.command()
 @click.option("--import-beads", is_flag=True, help="Import issues from existing beads installation")
+@click.option("--stealth", is_flag=True, help="Local-only mode (issues not pushed to remote)")
+@click.option(
+    "--contributor",
+    "contributor_repo",
+    help="External repo path for contributor mode (keeps planning separate from PRs)",
+)
 @pass_context
-def init(ctx: Context, import_beads: bool):
-    """Initialize microbeads in this repository."""
-    worktree = repo.init(ctx.repo_root)
+def init(ctx: Context, import_beads: bool, stealth: bool, contributor_repo: str | None):
+    """Initialize microbeads in this repository.
+
+    By default, issues are synced to the remote repository.
+
+    Use --stealth for local-only issue tracking (useful for experiments).
+    Use --contributor to route issues to a personal/external repo.
+    """
+    if stealth and contributor_repo:
+        raise click.ClickException("Cannot use both --stealth and --contributor")
+
+    worktree = repo.init(ctx.repo_root, stealth=stealth, contributor_repo=contributor_repo)
 
     imported = 0
     if import_beads:
@@ -306,10 +352,17 @@ def init(ctx: Context, import_beads: bool):
         settings_path = settings_dir / "settings.json"
         _install_claude_hooks(settings_dir, settings_path, "project")
 
+    mode = "stealth" if stealth else ("contributor" if contributor_repo else "normal")
+    mode_msg = ""
+    if stealth:
+        mode_msg = " (stealth mode - local only)"
+    elif contributor_repo:
+        mode_msg = f" (contributor mode - using {contributor_repo})"
+
     output(
         ctx,
-        {"status": "initialized", "worktree": str(worktree), "imported": imported},
-        f"Microbeads initialized. Issues stored on orphan branch '{repo.BRANCH_NAME}'.",
+        {"status": "initialized", "worktree": str(worktree), "imported": imported, "mode": mode},
+        f"Microbeads initialized{mode_msg}. Issues stored on orphan branch '{repo.BRANCH_NAME}'.",
     )
 
 
@@ -328,9 +381,25 @@ def init(ctx: Context, import_beads: bool):
     "-p", "--priority", default=2, type=click.IntRange(0, 4), help="Priority (0=critical, 4=low)"
 )
 @click.option("-l", "--label", multiple=True, help="Labels (can specify multiple)")
+@click.option("--design", default="", help="Design notes or approach")
+@click.option("--notes", default="", help="General notes")
+@click.option(
+    "--acceptance-criteria",
+    "acceptance_criteria",
+    default="",
+    help="Acceptance criteria / definition of done",
+)
 @pass_context
 def create(
-    ctx: Context, title: str, description: str, issue_type: str, priority: int, label: tuple
+    ctx: Context,
+    title: str,
+    description: str,
+    issue_type: str,
+    priority: int,
+    label: tuple,
+    design: str,
+    notes: str,
+    acceptance_criteria: str,
 ):
     """Create a new issue."""
     issue = issues.create_issue(
@@ -340,6 +409,9 @@ def create(
         issue_type=issues.IssueType(issue_type),
         priority=priority,
         labels=list(label) if label else None,
+        design=design,
+        notes=notes,
+        acceptance_criteria=acceptance_criteria,
     )
     issues.save_issue(ctx.worktree, issue)
     output(ctx, issue, f"Created {issue['id']}: {title}")
@@ -417,6 +489,9 @@ def show(ctx: Context, issue_id: str):
 @click.option("-l", "--label", multiple=True, help="Set labels (replaces existing)")
 @click.option("--add-label", multiple=True, help="Add labels")
 @click.option("--remove-label", multiple=True, help="Remove labels")
+@click.option("--design", help="Update design notes")
+@click.option("--notes", help="Update notes")
+@click.option("--acceptance-criteria", "acceptance_criteria", help="Update acceptance criteria")
 @pass_context
 def update(
     ctx: Context,
@@ -428,6 +503,9 @@ def update(
     label: tuple,
     add_label: tuple,
     remove_label: tuple,
+    design: str | None,
+    notes: str | None,
+    acceptance_criteria: str | None,
 ):
     """Update an issue."""
     try:
@@ -442,6 +520,9 @@ def update(
             labels=list(label) if label else None,
             add_labels=list(add_label) if add_label else None,
             remove_labels=list(remove_label) if remove_label else None,
+            design=design,
+            notes=notes,
+            acceptance_criteria=acceptance_criteria,
         )
         output(ctx, issue, f"Updated {issue['id']}")
     except ValueError as e:
@@ -561,6 +642,94 @@ def sync(ctx: Context, message: str | None):
     # Clear cache after sync since git may have updated files
     issues.clear_cache(ctx.worktree)
     output(ctx, {"status": "synced"}, "Changes synced.")
+
+
+@main.command()
+@click.option(
+    "--days",
+    default=7,
+    type=int,
+    help="Only compact issues closed more than N days ago (default: 7)",
+)
+@pass_context
+def compact(ctx: Context, days: int):
+    """Compact closed issues to reduce memory usage.
+
+    Removes verbose fields (description, dependencies, labels) from closed
+    issues older than the specified number of days, keeping only essential
+    information like ID, title, status, and close reason.
+
+    This helps AI agents manage context window limits during long sessions.
+    """
+    result = issues.compact_closed_issues(ctx.worktree, older_than_days=days)
+
+    if ctx.json_output:
+        output(ctx, result)
+        return
+
+    compacted = result["compacted"]
+    skipped = result["skipped"]
+
+    if compacted:
+        click.echo(f"Compacted {len(compacted)} issues:")
+        for item in compacted:
+            click.echo(f"  ● {item['id']}: {item['title']}")
+    else:
+        click.echo("No issues to compact.")
+
+    if skipped:
+        click.echo(f"Skipped {skipped} issues (already compacted or too recent).")
+
+
+@main.command()
+@click.option("--fix", is_flag=True, help="Automatically fix problems where possible")
+@pass_context
+def doctor(ctx: Context, fix: bool):
+    """Run health checks on issues and detect problems.
+
+    Checks for:
+    - Orphaned dependencies (references to non-existent issues)
+    - Stale blocked status (marked blocked but no open blockers)
+    - Dependency cycles
+    - Invalid field values (status, type, priority)
+
+    Use --fix to automatically fix problems where possible.
+    Note: Dependency cycles cannot be automatically fixed.
+    """
+    result = issues.run_doctor(ctx.worktree, fix=fix)
+
+    if ctx.json_output:
+        output(ctx, result)
+        return
+
+    total = result["total_issues"]
+    problems = result["problems"]
+    fixed = result["fixed"]
+
+    click.echo(f"Checked {total} issues.")
+
+    if fixed:
+        click.echo(f"\nFixed {len(fixed)} issues:")
+        for item in fixed:
+            for fix_msg in item["fixes"]:
+                click.echo(f"  ✓ {item['id']}: {fix_msg}")
+
+    if problems:
+        # Filter out problems that were fixed
+        fixed_ids = {item["id"] for item in fixed}
+        remaining = [p for p in problems if p["id"] not in fixed_ids or not fix]
+
+        if remaining:
+            click.echo(f"\nFound {len(remaining)} issues with problems:")
+            for item in remaining:
+                click.echo(f"  {item['id']}: {item['title']}")
+                for problem in item["problems"]:
+                    click.echo(f"    - {problem}")
+
+            if not fix:
+                click.echo("\nRun with --fix to automatically fix problems.")
+    else:
+        click.echo("No problems found.")
 
 
 @main.command("merge-driver", hidden=True)
@@ -746,6 +915,138 @@ def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
     # Write settings
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
     click.echo("Claude hooks removed.")
+
+
+# Git hook script template
+GIT_HOOK_SCRIPT = """#!/bin/sh
+# Microbeads git hook - auto-sync issues
+# Installed by: mb setup hooks
+
+# Only run if microbeads is initialized
+if [ -d ".git/microbeads-worktree" ]; then
+    {cmd} sync 2>/dev/null || true
+fi
+"""
+
+
+@main.group()
+def hooks():
+    """Manage git hooks for automatic synchronization."""
+    pass
+
+
+@hooks.command("install")
+@click.option(
+    "--hook",
+    multiple=True,
+    type=click.Choice(["post-merge", "post-checkout", "pre-push"]),
+    help="Specific hooks to install (default: all)",
+)
+@pass_context
+def hooks_install(ctx: Context, hook: tuple):
+    """Install git hooks for automatic issue synchronization.
+
+    Installs hooks that automatically sync microbeads issues:
+    - post-merge: Sync after merging branches
+    - post-checkout: Sync after switching branches
+    - pre-push: Sync before pushing
+
+    These hooks ensure your local issues stay in sync with remote changes.
+    """
+    hooks_dir = ctx.repo_root / ".git" / "hooks"
+    hooks_to_process = list(hook) if hook else ["post-merge", "post-checkout", "pre-push"]
+    _install_git_hooks(hooks_dir, hooks_to_process)
+
+
+@hooks.command("remove")
+@click.option(
+    "--hook",
+    multiple=True,
+    type=click.Choice(["post-merge", "post-checkout", "pre-push"]),
+    help="Specific hooks to remove (default: all)",
+)
+@pass_context
+def hooks_remove(ctx: Context, hook: tuple):
+    """Remove microbeads git hooks."""
+    hooks_dir = ctx.repo_root / ".git" / "hooks"
+    hooks_to_process = list(hook) if hook else ["post-merge", "post-checkout", "pre-push"]
+    _remove_git_hooks(hooks_dir, hooks_to_process)
+
+
+def _install_git_hooks(hooks_dir: Path, hooks: list[str]) -> None:
+    """Install git hooks."""
+    click.echo("Installing git hooks...")
+
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    cmd = get_command_name()
+    script = GIT_HOOK_SCRIPT.format(cmd=cmd)
+
+    for hook_name in hooks:
+        hook_path = hooks_dir / hook_name
+
+        # Check if hook already exists
+        if hook_path.exists():
+            content = hook_path.read_text()
+            if "microbeads" in content.lower():
+                click.echo(f"  {hook_name}: already installed")
+                continue
+            else:
+                # Append to existing hook
+                click.echo(f"  {hook_name}: appending to existing hook")
+                content = content.rstrip() + "\n\n" + script
+                hook_path.write_text(content)
+        else:
+            hook_path.write_text(script)
+            click.echo(f"  {hook_name}: installed")
+
+        # Make executable
+        hook_path.chmod(0o755)
+
+    click.echo("\nGit hooks installed.")
+
+
+def _remove_git_hooks(hooks_dir: Path, hooks: list[str]) -> None:
+    """Remove git hooks."""
+    click.echo("Removing git hooks...")
+
+    for hook_name in hooks:
+        hook_path = hooks_dir / hook_name
+
+        if not hook_path.exists():
+            click.echo(f"  {hook_name}: not found")
+            continue
+
+        content = hook_path.read_text()
+        if "microbeads" not in content.lower():
+            click.echo(f"  {hook_name}: no microbeads hook found")
+            continue
+
+        # Check if this is a microbeads-only hook or mixed
+        lines = content.split("\n")
+        non_microbeads_lines = []
+        in_microbeads_section = False
+
+        for line in lines:
+            if "Microbeads git hook" in line:
+                in_microbeads_section = True
+            elif in_microbeads_section and line.strip() == "fi":
+                in_microbeads_section = False
+                continue
+            elif not in_microbeads_section:
+                non_microbeads_lines.append(line)
+
+        # Check if anything remains
+        remaining = "\n".join(non_microbeads_lines).strip()
+        if remaining and remaining != "#!/bin/sh":
+            # Keep the non-microbeads parts
+            hook_path.write_text(remaining + "\n")
+            click.echo(f"  {hook_name}: removed microbeads section")
+        else:
+            # Remove the entire hook file
+            hook_path.unlink()
+            click.echo(f"  {hook_name}: removed")
+
+    click.echo("Git hooks removed.")
 
 
 if __name__ == "__main__":
