@@ -1,6 +1,6 @@
 # Microbeads
 
-A simplified git-backed issue tracker for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch.
+A simplified git-backed issue tracker for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch. A custom merge strategy ensure you never need to deal with conflicts.
 
 ## Installation
 
