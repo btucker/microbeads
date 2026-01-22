@@ -360,24 +360,41 @@ def get_blocked_issues(worktree: Path) -> list[dict[str, Any]]:
 
 
 def build_dependency_tree(
-    worktree: Path, issue_id: str, visited: set[str] | None = None
+    worktree: Path,
+    issue_id: str,
+    _visited: set[str] | None = None,
+    _cache: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build a dependency tree for an issue."""
-    if visited is None:
-        visited = set()
+    """Build a dependency tree for an issue.
+
+    Uses memoization to avoid exponential complexity when dependencies
+    form diamond patterns (A->B, A->C, B->D, C->D).
+    """
+    if _visited is None:
+        _visited = set()
+    if _cache is None:
+        _cache = {}
 
     full_id = resolve_issue_id(worktree, issue_id)
     if full_id is None:
         return {"id": issue_id, "error": "not found"}
 
-    if full_id in visited:
+    # Detect cycle (issue being processed in current path)
+    if full_id in _visited:
         return {"id": full_id, "error": "cycle"}
 
-    visited.add(full_id)
+    # Return cached result if we've already fully processed this issue
+    if full_id in _cache:
+        return _cache[full_id]
+
+    _visited.add(full_id)
 
     issue = get_issue(worktree, full_id)
     if issue is None:
-        return {"id": full_id, "error": "not found"}
+        _visited.discard(full_id)
+        result = {"id": full_id, "error": "not found"}
+        _cache[full_id] = result
+        return result
 
     tree = {
         "id": issue["id"],
@@ -387,7 +404,10 @@ def build_dependency_tree(
     }
 
     for dep_id in issue.get("dependencies", []):
-        dep_tree = build_dependency_tree(worktree, dep_id, visited.copy())
+        dep_tree = build_dependency_tree(worktree, dep_id, _visited, _cache)
         tree["dependencies"].append(dep_tree)
+
+    _visited.discard(full_id)
+    _cache[full_id] = tree
 
     return tree
