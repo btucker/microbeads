@@ -296,6 +296,16 @@ def init(ctx: Context, import_beads: bool):
     # Update AGENTS.md
     update_agents_md(ctx.repo_root, ctx.json_output)
 
+    # Auto-setup Claude hooks if Claude artifacts exist
+    claude_dir = ctx.repo_root / ".claude"
+    claude_md = ctx.repo_root / "CLAUDE.md"
+    if claude_dir.exists() or claude_md.exists():
+        if not ctx.json_output:
+            click.echo("Detected Claude Code artifacts, setting up hooks...")
+        settings_dir = ctx.repo_root / ".claude"
+        settings_path = settings_dir / "settings.json"
+        _install_claude_hooks(settings_dir, settings_path, "project")
+
     output(
         ctx,
         {"status": "initialized", "worktree": str(worktree), "imported": imported},
