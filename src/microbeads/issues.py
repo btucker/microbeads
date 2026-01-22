@@ -129,23 +129,29 @@ def resolve_issue_id(worktree: Path, issue_id: str) -> str | None:
     return None
 
 
+def load_all_issues(worktree: Path) -> dict[str, dict[str, Any]]:
+    """Load all issues into a dict keyed by ID. Single disk scan."""
+    issues_dir = repo.get_issues_path(worktree)
+
+    if not issues_dir.exists():
+        return {}
+
+    return {path.stem: load_issue(path) for path in issues_dir.glob("*.json")}
+
+
 def list_issues(
     worktree: Path,
     status: Status | None = None,
     priority: int | None = None,
     label: str | None = None,
     issue_type: IssueType | None = None,
+    _cache: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """List issues with optional filtering."""
-    issues_dir = repo.get_issues_path(worktree)
-
-    if not issues_dir.exists():
-        return []
+    all_issues = _cache if _cache is not None else load_all_issues(worktree)
 
     issues = []
-    for path in issues_dir.glob("*.json"):
-        issue = load_issue(path)
-
+    for issue in all_issues.values():
         # Apply filters
         if status is not None and issue.get("status") != status.value:
             continue
@@ -295,11 +301,14 @@ def remove_dependency(worktree: Path, child_id: str, parent_id: str) -> dict[str
     return child
 
 
-def get_open_blockers(worktree: Path, issue: dict[str, Any]) -> list[dict[str, Any]]:
+def get_open_blockers(
+    issue: dict[str, Any],
+    cache: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Get all open/in_progress issues that block this issue."""
     blockers = []
     for dep_id in issue.get("dependencies", []):
-        dep = get_issue(worktree, dep_id)
+        dep = cache.get(dep_id)
         if dep and dep.get("status") in (Status.OPEN.value, Status.IN_PROGRESS.value, Status.BLOCKED.value):
             blockers.append(dep)
     return blockers
@@ -307,37 +316,41 @@ def get_open_blockers(worktree: Path, issue: dict[str, Any]) -> list[dict[str, A
 
 def get_ready_issues(worktree: Path) -> list[dict[str, Any]]:
     """Get issues that are ready to work on (open/in_progress with no open blockers)."""
-    all_issues = list_issues(worktree)
+    cache = load_all_issues(worktree)
     ready = []
 
-    for issue in all_issues:
+    for issue in cache.values():
         status = issue.get("status")
         if status not in (Status.OPEN.value, Status.IN_PROGRESS.value):
             continue
 
-        open_blockers = get_open_blockers(worktree, issue)
+        open_blockers = get_open_blockers(issue, cache)
         if not open_blockers:
             ready.append(issue)
 
+    # Sort by priority, then created_at
+    ready.sort(key=lambda x: (x.get("priority", 2), x.get("created_at", "")))
     return ready
 
 
 def get_blocked_issues(worktree: Path) -> list[dict[str, Any]]:
     """Get issues that are blocked by open dependencies."""
-    all_issues = list_issues(worktree)
+    cache = load_all_issues(worktree)
     blocked = []
 
-    for issue in all_issues:
+    for issue in cache.values():
         status = issue.get("status")
         if status not in (Status.OPEN.value, Status.IN_PROGRESS.value, Status.BLOCKED.value):
             continue
 
-        open_blockers = get_open_blockers(worktree, issue)
+        open_blockers = get_open_blockers(issue, cache)
         if open_blockers:
             # Add blocker info to the issue
             issue["_blockers"] = [b["id"] for b in open_blockers]
             blocked.append(issue)
 
+    # Sort by priority, then created_at
+    blocked.sort(key=lambda x: (x.get("priority", 2), x.get("created_at", "")))
     return blocked
 
 
