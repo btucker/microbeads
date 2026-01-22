@@ -87,3 +87,35 @@ def mock_worktree(tmp_path: Path) -> Path:
     (beads_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
     return worktree
+
+
+@pytest.fixture
+def mock_worktree_with_cache(tmp_path: Path) -> Path:
+    """Create a mock worktree with cache support for testing disk cache.
+
+    This fixture simulates the real directory structure where the worktree
+    is at .git/microbeads-worktree/ so the disk cache can be created.
+    """
+    # Create .git directory (simulating real repo structure)
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+
+    # Create the worktree inside .git like the real implementation
+    worktree = git_dir / "microbeads-worktree"
+    worktree.mkdir()
+
+    # Create the microbeads directory structure
+    beads_dir = worktree / ".microbeads"
+    beads_dir.mkdir()
+    issues_dir = beads_dir / "issues"
+    issues_dir.mkdir()
+
+    # Create active and closed subdirectories
+    (issues_dir / "active").mkdir()
+    (issues_dir / "closed").mkdir()
+
+    # Create metadata file
+    metadata = {"version": "0.1.0", "id_prefix": "test"}
+    (beads_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+    return worktree

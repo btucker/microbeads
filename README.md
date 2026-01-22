@@ -1,16 +1,16 @@
 # Microbeads
 
-A simplified git-backed issue tracker for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch. A custom merge strategy ensure you never need to deal with conflicts.
+A simplified git-backed issue tracker for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch. No SQLite, no daemon, no issues with multiple worktrees. A custom merge strategy ensures you never need to deal with conflicts. Unlike beads, microbeads fully supports Claude Code Web sessions with automatic branch routing.
 
 ## Installation
 
 ```bash
 # Run directly with uvx (no install needed)
-uvx microbeads --help
+uvx microbeads init
 
 # Or install globally for the `mb` command
 uv tool install microbeads
-mb --help
+mb init
 ```
 
 After `uv tool install`, you get two commands: `mb` (short) and `microbeads` (full).
@@ -37,7 +37,7 @@ This creates:
 
 ### 2. Import from existing beads (optional)
 
-If you have the reference beads implementation (`bd`) installed with existing issues:
+If you have [beads](https://github.com/steveyegge/beads) (`bd`) installed with existing issues:
 
 ```bash
 mb init --import-beads
@@ -120,8 +120,6 @@ mb sync    # Commit and push to orphan branch
 ```bash
 mb doctor              # Check for issues (orphan deps, cycles, missing files)
 mb doctor --fix        # Auto-fix problems where possible
-mb compact             # Compress old closed issues (removes history/metadata)
-mb compact --days 30   # Only compact issues closed >30 days ago (default: 7)
 ```
 
 ### JSON Output
@@ -130,29 +128,34 @@ Add `--json` for machine-readable output:
 
 ```bash
 mb --json list
-mb --json show bd-abc
+mb --json show mi-abc
 mb --json ready
 ```
 
 ## How It Works
 
-Unlike the reference beads implementation (SQLite + JSONL), microbeads stores each issue as a separate JSON file:
+Unlike beads (SQLite + JSONL), microbeads stores each issue as a separate JSON file:
 
 ```
 .git/microbeads-worktree/
 └── .microbeads/
     ├── metadata.json
     └── issues/
-        ├── bd-a1b2.json
-        ├── bd-c3d4.json
-        └── ...
+        ├── active/
+        │   ├── mi-a1b2.json
+        │   └── mi-c3d4.json
+        └── closed/
+            └── mi-e5f6.json
 ```
+
+Active issues (open, in_progress, blocked) are stored separately from closed issues for faster loading—most operations only need active issues.
 
 Benefits:
 - **No database** - Just JSON files, easy to inspect and debug
 - **Git-native** - Issues sync with normal git operations
 - **Merge-friendly** - Custom merge driver handles conflicts automatically
 - **Multi-agent safe** - Multiple agents can work on different issues
+- **Fast loading** - Only loads closed issues when explicitly requested
 
 The `microbeads` orphan branch keeps issue data completely separate from your code.
 
@@ -250,7 +253,7 @@ mb hooks remove
 mb hooks remove --global
 ```
 
-This adds `SessionStart` and `PreCompact` hooks that run `mb prime` to remind the AI agent of the microbeads workflow.
+This adds a `SessionStart` hook that runs `mb prime` to remind the AI agent of the microbeads workflow.
 
 ## For AI Agents
 
@@ -259,16 +262,15 @@ See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
 - JSON output mode
 - Landing the plane (session completion checklist)
 
-## Differences from Reference Beads
+## Differences from Beads
 
-| Feature | Reference Beads | Microbeads |
+| Feature | Beads | Microbeads |
 |---------|----------------|------------|
 | Storage | SQLite + JSONL | JSON files |
 | Sync | Daemon + auto-export | Manual `sync` |
 | Branch | Configurable | Always `microbeads` orphan |
 | Merge | JSONL conflicts | JSON merge driver |
 | Doctor | `bd doctor` | `mb doctor` |
-| Compaction | Semantic compaction | `mb compact` |
 | History | Full tracking | Full tracking |
 | Hooks | Git hooks | Claude Code hooks |
 | Modes | Stealth, contributor | Stealth, contributor |
@@ -276,3 +278,21 @@ See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
 | Daemon | Yes | No |
 
 Microbeads focuses on the essentials for AI agent issue tracking, without the complexity of federation or background daemons.
+
+## Performance
+
+### Benchmarks (vs `bd`)
+
+| Operation | mb | bd |
+|-----------|-----|-----|
+| List 500 issues (10x) | 0.93s | 0.70s |
+| Ready 200 issues (10x) | 0.85s | 0.65s |
+| Update 50 issues | 4.2s | 2.1s |
+| Create 100 issues | 8.5s | 4.2s |
+
+The gap is primarily Python interpreter startup overhead (~100ms per invocation).
+
+```bash
+# Run benchmarks (requires bd binary)
+uv run pytest tests/test_performance.py -m slow -v
+```

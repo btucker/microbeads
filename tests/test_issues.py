@@ -7,15 +7,16 @@ from pathlib import Path
 import pytest
 
 from microbeads.issues import (
+    _ACTIVE_CACHE_FILE,
     CorruptedFileError,
     IssueType,
     Status,
     ValidationError,
     _add_history_entry,
+    _get_disk_cache_path,
     add_dependency,
+    clear_cache,
     close_issue,
-    compact_closed_issues,
-    compact_issue,
     create_issue,
     generate_id,
     get_blocked_issues,
@@ -1057,99 +1058,215 @@ class TestDoctorCommand:
         assert len(cycle_problems) >= 1
 
 
-class TestCompactCommand:
-    """Tests for issue compaction."""
+class TestDiskCache:
+    """Tests for the persistent disk cache functionality."""
 
-    def test_compact_issue_closed(self):
-        """Test compacting a closed issue."""
-        issue = {
-            "id": "test-1234",
-            "title": "Completed feature",
-            "status": "closed",
-            "type": "feature",
-            "priority": 1,
-            "description": "Long description\nwith multiple lines\nof text",
-            "labels": ["frontend", "urgent"],
-            "dependencies": ["dep-1", "dep-2"],
-            "history": [{"field": "status", "old": "open", "new": "closed"}],
-            "closed_at": "2024-01-01T00:00:00Z",
-            "closed_reason": "Done",
-            "design": "Some design notes",
-            "notes": "Some notes",
-        }
+    def test_disk_cache_path_determined_correctly(self, mock_worktree_with_cache: Path):
+        """Test that disk cache path is determined correctly from worktree."""
+        cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
 
-        compacted = compact_issue(issue)
+        assert cache_path is not None
+        # Cache should be in .git/microbeads-cache/
+        assert "microbeads-cache" in str(cache_path)
+        assert cache_path.name == _ACTIVE_CACHE_FILE
 
-        # Essential fields preserved
-        assert compacted["id"] == "test-1234"
-        assert compacted["title"] == "Completed feature"
-        assert compacted["status"] == "closed"
-        assert compacted["type"] == "feature"
-        assert compacted["priority"] == 1
-        assert compacted["closed_at"] == "2024-01-01T00:00:00Z"
-        assert compacted["closed_reason"] == "Done"
-        assert compacted["compacted"] is True
+    def test_disk_cache_created_on_first_load(self, mock_worktree_with_cache: Path):
+        """Test that disk cache is created when loading issues."""
+        # Clear any in-memory cache
+        clear_cache()
 
-        # Verbose fields removed
-        assert "description" not in compacted
-        assert "history" not in compacted
-        assert "design" not in compacted
-        assert "notes" not in compacted
-        assert "labels" not in compacted
-        assert "dependencies" not in compacted
+        # Create some issues
+        issue1 = create_issue("Issue 1", mock_worktree_with_cache)
+        issue2 = create_issue("Issue 2", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue1)
+        save_issue(mock_worktree_with_cache, issue2)
 
-        # Counts preserved
-        assert compacted["label_count"] == 2
-        assert compacted["dependency_count"] == 2
+        # Clear in-memory cache to force disk read
+        clear_cache()
 
-        # Summary from first line of description
-        assert compacted["summary"] == "Long description"
+        # Load issues - this should create the disk cache
+        loaded = load_active_issues(mock_worktree_with_cache)
+        assert len(loaded) == 2
 
-    def test_compact_issue_skips_open(self):
-        """Test that compact_issue doesn't modify open issues."""
-        issue = {
-            "id": "test-1234",
-            "title": "Open issue",
-            "status": "open",
-            "description": "Should not be compacted",
-        }
+        # Verify disk cache was created
+        cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        assert cache_path is not None
+        assert cache_path.exists()
 
-        compacted = compact_issue(issue)
+    def test_disk_cache_hit_on_subsequent_load(self, mock_worktree_with_cache: Path):
+        """Test that disk cache is used on subsequent loads."""
+        import time
 
-        assert compacted == issue  # Unchanged
+        clear_cache()
 
-    def test_compact_closed_issues_respects_age(self, mock_worktree: Path):
-        """Test that compact_closed_issues respects the age threshold."""
-        from datetime import datetime, timedelta, timezone
+        # Create an issue
+        issue = create_issue("Test Issue", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue)
 
-        # Create a recently closed issue
-        recent = create_issue("Recent", mock_worktree)
-        recent["status"] = Status.CLOSED.value
-        recent["closed_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        save_issue(mock_worktree, recent)
+        # First load creates cache
+        clear_cache()
+        load_active_issues(mock_worktree_with_cache)
 
-        # Create an old closed issue
-        old = create_issue("Old", mock_worktree)
-        old["status"] = Status.CLOSED.value
-        old_date = datetime.now(timezone.utc) - timedelta(days=30)
-        old["closed_at"] = old_date.isoformat().replace("+00:00", "Z")
-        save_issue(mock_worktree, old)
+        cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        assert cache_path is not None
 
-        result = compact_closed_issues(mock_worktree, older_than_days=7)
+        # Record cache mtime
+        cache_mtime_before = cache_path.stat().st_mtime
 
-        # Only old issue should be compacted
-        assert len(result["compacted"]) == 1
-        assert result["compacted"][0]["id"] == old["id"]
+        # Small delay to ensure time passes
+        time.sleep(0.01)
 
-    def test_compact_closed_issues_skips_already_compacted(self, mock_worktree: Path):
-        """Test that already compacted issues are skipped."""
-        issue = create_issue("Already compacted", mock_worktree)
-        issue["status"] = Status.CLOSED.value
-        issue["compacted"] = True
-        issue["closed_at"] = "2020-01-01T00:00:00Z"  # Old
-        save_issue(mock_worktree, issue)
+        # Second load should use cache (not rewrite it)
+        clear_cache()
+        loaded = load_active_issues(mock_worktree_with_cache)
 
-        result = compact_closed_issues(mock_worktree, older_than_days=1)
+        # Cache file should not have been rewritten
+        cache_mtime_after = cache_path.stat().st_mtime
+        assert cache_mtime_before == cache_mtime_after
 
-        assert result["compacted"] == []
-        assert result["skipped"] == 1
+        # Data should still be correct
+        assert issue["id"] in loaded
+
+    def test_disk_cache_invalidated_on_file_modification(self, mock_worktree_with_cache: Path):
+        """Test that disk cache is invalidated when an issue file is modified."""
+        import time
+
+        clear_cache()
+
+        # Create and load an issue
+        issue = create_issue("Test Issue", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue)
+
+        clear_cache()
+        load_active_issues(mock_worktree_with_cache)
+
+        cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        cache_mtime_before = cache_path.stat().st_mtime
+
+        # Small delay
+        time.sleep(0.01)
+
+        # Modify the issue file (update the issue)
+        issue["title"] = "Modified Issue"
+        save_issue(mock_worktree_with_cache, issue)
+
+        # Clear in-memory cache
+        clear_cache()
+
+        # Load should detect stale cache and rebuild
+        loaded = load_active_issues(mock_worktree_with_cache)
+
+        # Verify the modified title is loaded
+        assert loaded[issue["id"]]["title"] == "Modified Issue"
+
+        # Cache should have been rewritten
+        cache_mtime_after = cache_path.stat().st_mtime
+        assert cache_mtime_after > cache_mtime_before
+
+    def test_disk_cache_invalidated_on_file_deletion(self, mock_worktree_with_cache: Path):
+        """Test that disk cache is invalidated when an issue file is deleted."""
+        clear_cache()
+
+        # Create two issues
+        issue1 = create_issue("Issue 1", mock_worktree_with_cache)
+        issue2 = create_issue("Issue 2", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue1)
+        save_issue(mock_worktree_with_cache, issue2)
+
+        # Load to create cache
+        clear_cache()
+        loaded = load_active_issues(mock_worktree_with_cache)
+        assert len(loaded) == 2
+
+        # Close issue1 (moves it from active to closed)
+        close_issue(mock_worktree_with_cache, issue1["id"])
+
+        # Clear in-memory cache
+        clear_cache()
+
+        # Load should detect count mismatch and rebuild
+        loaded = load_active_issues(mock_worktree_with_cache)
+
+        # Only issue2 should be in active issues now
+        assert len(loaded) == 1
+        assert issue2["id"] in loaded
+        assert issue1["id"] not in loaded
+
+    def test_disk_cache_with_no_issues(self, mock_worktree_with_cache: Path):
+        """Test disk cache behavior with no issues."""
+        clear_cache()
+
+        # Load empty issues - should work without errors
+        loaded = load_active_issues(mock_worktree_with_cache)
+        assert loaded == {}
+
+    def test_disk_cache_corrupted_is_rebuilt(self, mock_worktree_with_cache: Path):
+        """Test that corrupted disk cache is detected and rebuilt."""
+        clear_cache()
+
+        # Create an issue
+        issue = create_issue("Test Issue", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue)
+
+        # Load to create cache
+        clear_cache()
+        load_active_issues(mock_worktree_with_cache)
+
+        # Corrupt the cache
+        cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        assert cache_path is not None
+        cache_path.write_text("not valid json {{{")
+
+        # Clear in-memory cache
+        clear_cache()
+
+        # Load should detect corruption and rebuild
+        loaded = load_active_issues(mock_worktree_with_cache)
+
+        # Data should still be correct
+        assert issue["id"] in loaded
+        assert loaded[issue["id"]]["title"] == "Test Issue"
+
+    def test_clear_cache_include_disk_deletes_cache_files(self, mock_worktree_with_cache: Path):
+        """Test that clear_cache with include_disk=True deletes disk cache files."""
+        clear_cache()
+
+        # Create an issue and load to create disk cache
+        issue = create_issue("Test Issue", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue)
+        clear_cache()
+        load_active_issues(mock_worktree_with_cache)
+
+        # Verify disk cache was created
+        active_cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        assert active_cache_path is not None
+        assert active_cache_path.exists()
+
+        # Clear with include_disk=True
+        clear_cache(mock_worktree_with_cache, include_disk=True)
+
+        # Disk cache should be deleted
+        assert not active_cache_path.exists()
+
+    def test_clear_cache_without_include_disk_preserves_cache_files(
+        self, mock_worktree_with_cache: Path
+    ):
+        """Test that clear_cache without include_disk preserves disk cache files."""
+        clear_cache()
+
+        # Create an issue and load to create disk cache
+        issue = create_issue("Test Issue", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue)
+        clear_cache()
+        load_active_issues(mock_worktree_with_cache)
+
+        # Verify disk cache was created
+        active_cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        assert active_cache_path is not None
+        assert active_cache_path.exists()
+
+        # Clear without include_disk (default)
+        clear_cache(mock_worktree_with_cache)
+
+        # Disk cache should still exist
+        assert active_cache_path.exists()

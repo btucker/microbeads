@@ -392,6 +392,93 @@ class TestMemoryEfficiency:
         # This test passes if no exception is raised
 
 
+@pytest.mark.slow
+class TestDiskCachePerformance:
+    """Benchmark tests for disk cache performance improvement."""
+
+    NUM_ISSUES = 500
+
+    @pytest.fixture
+    def cache_perf_worktree(self, tmp_path: Path) -> Path:
+        """Create a worktree with proper structure for cache testing."""
+        # Create .git directory (simulating real repo structure)
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+
+        # Create the worktree inside .git like the real implementation
+        worktree = git_dir / "microbeads-worktree"
+        worktree.mkdir()
+
+        beads_dir = worktree / ".microbeads"
+        beads_dir.mkdir()
+        issues_dir = beads_dir / "issues"
+        issues_dir.mkdir()
+        (issues_dir / "active").mkdir()
+        (issues_dir / "closed").mkdir()
+        (beads_dir / "metadata.json").write_text('{"version": "0.1.0", "id_prefix": "perf"}\n')
+
+        return worktree
+
+    def test_disk_cache_speedup(self, cache_perf_worktree: Path):
+        """Benchmark disk cache vs cold load performance."""
+        worktree = cache_perf_worktree
+
+        # Create issues
+        print(f"\nCreating {self.NUM_ISSUES} issues...")
+        for i in range(self.NUM_ISSUES):
+            issue = issues.create_issue(
+                title=f"Perf test issue {i}",
+                worktree=worktree,
+                priority=i % 5,
+            )
+            issues.save_issue(worktree, issue)
+
+        # Warm up - create disk cache
+        issues.clear_cache()
+        issues.load_active_issues(worktree)
+
+        # Measure cold load (no in-memory cache, but disk cache exists)
+        cold_times = []
+        for _ in range(5):
+            issues.clear_cache()  # Clear in-memory cache only
+            start = time.perf_counter()
+            issues.load_active_issues(worktree)
+            cold_times.append(time.perf_counter() - start)
+
+        # Delete disk cache to measure truly cold load
+        from microbeads.issues import _ACTIVE_CACHE_FILE, _get_disk_cache_path
+
+        cache_path = _get_disk_cache_path(worktree, _ACTIVE_CACHE_FILE)
+        if cache_path and cache_path.exists():
+            cache_path.unlink()
+
+        no_cache_times = []
+        for _ in range(3):
+            issues.clear_cache()
+            # Delete cache file each time
+            if cache_path and cache_path.exists():
+                cache_path.unlink()
+            start = time.perf_counter()
+            issues.load_active_issues(worktree)
+            no_cache_times.append(time.perf_counter() - start)
+
+        avg_cold = sum(cold_times) / len(cold_times)
+        avg_no_cache = sum(no_cache_times) / len(no_cache_times)
+        speedup = avg_no_cache / avg_cold if avg_cold > 0 else 0
+
+        print(f"\n{'=' * 60}")
+        print("DISK CACHE BENCHMARK RESULTS")
+        print(f"{'=' * 60}")
+        print(f"Issues: {self.NUM_ISSUES}")
+        print(f"Without disk cache: {avg_no_cache * 1000:.2f}ms")
+        print(f"With disk cache:    {avg_cold * 1000:.2f}ms")
+        print(f"Speedup:            {speedup:.2f}x")
+        print(f"{'=' * 60}")
+
+        # Disk cache should provide at least some speedup
+        assert speedup > 1.0, f"Expected disk cache to be faster, got {speedup:.2f}x"
+
+
 def _print_benchmark_table(results: list[dict]) -> None:
     """Print benchmark results as a formatted table."""
     print("\n" + "=" * 70)
@@ -432,8 +519,41 @@ class TestBenchmarkVsBd:
         return bd_path
 
     @pytest.fixture
-    def benchmark_repos(self, tmp_path: Path, bd_available: str) -> tuple[Path, Path]:
-        """Create two git repos for benchmarking - one for mb, one for bd."""
+    def mb_installed(self, tmp_path: Path) -> str:
+        """Install mb in a temporary venv and return the path to the mb binary.
+
+        This avoids the overhead of 'uv run' for each invocation.
+        """
+        import subprocess
+        import sys
+
+        venv_path = tmp_path / "mb-venv"
+
+        # Create venv
+        subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
+
+        # Install microbeads from current directory
+        pip_path = venv_path / "bin" / "pip"
+        subprocess.run(
+            [str(pip_path), "install", "-e", str(Path(__file__).parent.parent)],
+            capture_output=True,
+            check=True,
+        )
+
+        mb_path = venv_path / "bin" / "mb"
+        if not mb_path.exists():
+            pytest.skip("Failed to install mb in temp venv")
+
+        return str(mb_path)
+
+    @pytest.fixture
+    def benchmark_repos(
+        self, tmp_path: Path, bd_available: str, mb_installed: str
+    ) -> tuple[Path, Path, str]:
+        """Create two git repos for benchmarking - one for mb, one for bd.
+
+        Returns (mb_repo, bd_repo, mb_path) tuple.
+        """
         import os
         import subprocess
 
@@ -490,27 +610,29 @@ class TestBenchmarkVsBd:
             ["git", "commit", "-m", "init"], cwd=bd_repo, capture_output=True, check=True, env=env
         )
 
-        return mb_repo, bd_repo
+        return mb_repo, bd_repo, mb_installed
 
-    def test_benchmark_create_issues(self, benchmark_repos: tuple[Path, Path], bd_available: str):
+    def test_benchmark_create_issues(
+        self, benchmark_repos: tuple[Path, Path, str], bd_available: str
+    ):
         """Benchmark creating issues: microbeads vs bd."""
         import os
         import subprocess
 
-        mb_repo, bd_repo = benchmark_repos
+        mb_repo, bd_repo, mb_path = benchmark_repos
 
         env = os.environ.copy()
         env["HOME"] = str(mb_repo.parent)
 
         # Initialize both
-        subprocess.run(["uv", "run", "mb", "init"], cwd=mb_repo, capture_output=True, env=env)
+        subprocess.run([mb_path, "init"], cwd=mb_repo, capture_output=True, env=env)
         subprocess.run([bd_available, "init"], cwd=bd_repo, capture_output=True, env=env)
 
         # Benchmark microbeads
         mb_start = time.perf_counter()
         for i in range(self.NUM_ISSUES):
             subprocess.run(
-                ["uv", "run", "mb", "create", f"Issue {i}", "-p", str(i % 5)],
+                [mb_path, "create", f"Issue {i}", "-p", str(i % 5)],
                 cwd=mb_repo,
                 capture_output=True,
                 env=env,
@@ -534,24 +656,26 @@ class TestBenchmarkVsBd:
             ]
         )
 
-    def test_benchmark_list_issues(self, benchmark_repos: tuple[Path, Path], bd_available: str):
+    def test_benchmark_list_issues(
+        self, benchmark_repos: tuple[Path, Path, str], bd_available: str
+    ):
         """Benchmark listing issues: microbeads vs bd."""
         import os
         import subprocess
 
-        mb_repo, bd_repo = benchmark_repos
+        mb_repo, bd_repo, mb_path = benchmark_repos
 
         env = os.environ.copy()
         env["HOME"] = str(mb_repo.parent)
 
         # Initialize and create issues
-        subprocess.run(["uv", "run", "mb", "init"], cwd=mb_repo, capture_output=True, env=env)
+        subprocess.run([mb_path, "init"], cwd=mb_repo, capture_output=True, env=env)
         subprocess.run([bd_available, "init"], cwd=bd_repo, capture_output=True, env=env)
 
         # Create 500 issues in each
         for i in range(500):
             subprocess.run(
-                ["uv", "run", "mb", "create", f"Issue {i}"],
+                [mb_path, "create", f"Issue {i}"],
                 cwd=mb_repo,
                 capture_output=True,
                 env=env,
@@ -563,7 +687,7 @@ class TestBenchmarkVsBd:
         # Benchmark list operations (10 times each)
         mb_start = time.perf_counter()
         for _ in range(10):
-            subprocess.run(["uv", "run", "mb", "list"], cwd=mb_repo, capture_output=True, env=env)
+            subprocess.run([mb_path, "list"], cwd=mb_repo, capture_output=True, env=env)
         mb_elapsed = time.perf_counter() - mb_start
 
         bd_start = time.perf_counter()
@@ -574,5 +698,168 @@ class TestBenchmarkVsBd:
         _print_benchmark_table(
             [
                 {"name": "List 500 issues (10x)", "mb": mb_elapsed, "bd": bd_elapsed},
+            ]
+        )
+
+    def test_benchmark_ready_issues(
+        self, benchmark_repos: tuple[Path, Path, str], bd_available: str
+    ):
+        """Benchmark ready command: microbeads vs bd."""
+        import os
+        import subprocess
+
+        mb_repo, bd_repo, mb_path = benchmark_repos
+
+        env = os.environ.copy()
+        env["HOME"] = str(mb_repo.parent)
+
+        # Initialize both
+        subprocess.run([mb_path, "init"], cwd=mb_repo, capture_output=True, env=env)
+        subprocess.run([bd_available, "init"], cwd=bd_repo, capture_output=True, env=env)
+
+        # Create 200 issues with some dependencies to make ready interesting
+        mb_ids = []
+        bd_ids = []
+        for i in range(200):
+            result = subprocess.run(
+                [mb_path, "create", f"Issue {i}", "--json"],
+                cwd=mb_repo,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+            if result.returncode == 0:
+                import json
+
+                try:
+                    data = json.loads(result.stdout)
+                    mb_ids.append(data.get("id", ""))
+                except json.JSONDecodeError:
+                    pass
+
+            result = subprocess.run(
+                [bd_available, "create", f"Issue {i}", "--json"],
+                cwd=bd_repo,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+            if result.returncode == 0:
+                try:
+                    data = json.loads(result.stdout)
+                    bd_ids.append(data.get("id", ""))
+                except json.JSONDecodeError:
+                    pass
+
+        # Add some dependencies (every 5th issue depends on previous)
+        for i in range(5, min(len(mb_ids), 200), 5):
+            if mb_ids[i] and mb_ids[i - 1]:
+                subprocess.run(
+                    [mb_path, "dep", "add", mb_ids[i], mb_ids[i - 1]],
+                    cwd=mb_repo,
+                    capture_output=True,
+                    env=env,
+                )
+            if i < len(bd_ids) and bd_ids[i] and bd_ids[i - 1]:
+                subprocess.run(
+                    [bd_available, "dep", "add", bd_ids[i], bd_ids[i - 1]],
+                    cwd=bd_repo,
+                    capture_output=True,
+                    env=env,
+                )
+
+        # Benchmark ready operations (10 times each)
+        mb_start = time.perf_counter()
+        for _ in range(10):
+            subprocess.run([mb_path, "ready"], cwd=mb_repo, capture_output=True, env=env)
+        mb_elapsed = time.perf_counter() - mb_start
+
+        bd_start = time.perf_counter()
+        for _ in range(10):
+            subprocess.run([bd_available, "ready"], cwd=bd_repo, capture_output=True, env=env)
+        bd_elapsed = time.perf_counter() - bd_start
+
+        _print_benchmark_table(
+            [
+                {"name": "Ready 200 issues (10x)", "mb": mb_elapsed, "bd": bd_elapsed},
+            ]
+        )
+
+    def test_benchmark_update_issues(
+        self, benchmark_repos: tuple[Path, Path, str], bd_available: str
+    ):
+        """Benchmark update command: microbeads vs bd."""
+        import os
+        import subprocess
+
+        mb_repo, bd_repo, mb_path = benchmark_repos
+
+        env = os.environ.copy()
+        env["HOME"] = str(mb_repo.parent)
+
+        # Initialize both
+        subprocess.run([mb_path, "init"], cwd=mb_repo, capture_output=True, env=env)
+        subprocess.run([bd_available, "init"], cwd=bd_repo, capture_output=True, env=env)
+
+        # Create 50 issues to update
+        mb_ids = []
+        bd_ids = []
+        for i in range(50):
+            result = subprocess.run(
+                [mb_path, "create", f"Issue {i}", "--json"],
+                cwd=mb_repo,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+            if result.returncode == 0:
+                import json
+
+                try:
+                    data = json.loads(result.stdout)
+                    mb_ids.append(data.get("id", ""))
+                except json.JSONDecodeError:
+                    pass
+
+            result = subprocess.run(
+                [bd_available, "create", f"Issue {i}", "--json"],
+                cwd=bd_repo,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+            if result.returncode == 0:
+                try:
+                    data = json.loads(result.stdout)
+                    bd_ids.append(data.get("id", ""))
+                except json.JSONDecodeError:
+                    pass
+
+        # Benchmark update operations (update each issue's priority)
+        mb_start = time.perf_counter()
+        for i, issue_id in enumerate(mb_ids):
+            if issue_id:
+                subprocess.run(
+                    [mb_path, "update", issue_id, "-p", str(i % 5)],
+                    cwd=mb_repo,
+                    capture_output=True,
+                    env=env,
+                )
+        mb_elapsed = time.perf_counter() - mb_start
+
+        bd_start = time.perf_counter()
+        for i, issue_id in enumerate(bd_ids):
+            if issue_id:
+                subprocess.run(
+                    [bd_available, "update", issue_id, "-p", str(i % 5)],
+                    cwd=bd_repo,
+                    capture_output=True,
+                    env=env,
+                )
+        bd_elapsed = time.perf_counter() - bd_start
+
+        _print_benchmark_table(
+            [
+                {"name": "Update 50 issues", "mb": mb_elapsed, "bd": bd_elapsed},
             ]
         )

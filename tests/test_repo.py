@@ -224,21 +224,21 @@ class TestGetCommandName:
         """Test that mb is returned when invoked as mb."""
         with patch("microbeads._is_dogfooding", return_value=False):
             with patch("microbeads.sys.argv", ["/usr/bin/mb", "list"]):
-                with patch("microbeads.shutil.which", return_value=None):
+                with patch("shutil.which", return_value=None):
                     assert get_command_name() == "mb"
 
     def test_returns_mb_when_in_path(self):
         """Test that mb is returned when available in PATH."""
         with patch("microbeads._is_dogfooding", return_value=False):
             with patch("microbeads.sys.argv", ["/some/other/script", "list"]):
-                with patch("microbeads.shutil.which", return_value="/usr/local/bin/mb"):
+                with patch("shutil.which", return_value="/usr/local/bin/mb"):
                     assert get_command_name() == "mb"
 
     def test_returns_uvx_when_mb_not_available(self):
         """Test fallback to uvx microbeads when mb not available."""
         with patch("microbeads._is_dogfooding", return_value=False):
             with patch("microbeads.sys.argv", ["/some/script", "list"]):
-                with patch("microbeads.shutil.which", return_value=None):
+                with patch("shutil.which", return_value=None):
                     assert get_command_name() == "uvx microbeads"
 
 

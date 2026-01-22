@@ -1,6 +1,5 @@
 """Microbeads - A simplified git-backed issue tracker for AI agents."""
 
-import shutil
 import sys
 from pathlib import Path
 
@@ -43,6 +42,8 @@ def get_command_name() -> str:
             return "mb"
 
     # Check if mb is available in PATH
+    import shutil
+
     if shutil.which("mb"):
         return "mb"
 

@@ -1,17 +1,22 @@
 """Issue storage and management."""
 
 import hashlib
-import json
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
+
+import orjson
 
 from . import repo
 
 # In-memory caches for loaded issues, keyed by directory path
 _active_cache: dict[str, dict[str, dict[str, Any]]] = {}
 _closed_cache: dict[str, dict[str, dict[str, Any]]] = {}
+
+# Disk cache file names
+_ACTIVE_CACHE_FILE = "active_issues.cache"
+_CLOSED_CACHE_FILE = "closed_issues.cache"
 
 
 def _get_active_cache_key(worktree: Path) -> str:
@@ -62,12 +67,14 @@ def _remove_from_closed_cache(worktree: Path, issue_id: str) -> None:
         cache.pop(issue_id, None)
 
 
-def clear_cache(worktree: Path | None = None) -> None:
+def clear_cache(worktree: Path | None = None, include_disk: bool = False) -> None:
     """Clear the issues cache.
 
     Args:
         worktree: If provided, clear cache only for this worktree.
                   If None, clear all caches.
+        include_disk: If True, also delete disk cache files.
+                      Use after sync to ensure fresh data from git.
     """
     global _active_cache, _closed_cache
     if worktree is None:
@@ -76,6 +83,110 @@ def clear_cache(worktree: Path | None = None) -> None:
     else:
         _active_cache.pop(_get_active_cache_key(worktree), None)
         _closed_cache.pop(_get_closed_cache_key(worktree), None)
+
+        if include_disk:
+            _clear_disk_cache(worktree)
+
+
+def _get_disk_cache_path(worktree: Path, cache_file: str) -> Path | None:
+    """Get the path to a disk cache file.
+
+    Returns None if we can't determine the repo root (e.g., in tests).
+    """
+    # Find repo root from worktree path
+    # Worktree is at .git/microbeads-worktree, so repo root is 2 levels up
+    # But we should use the git common dir approach
+    git_dir = worktree.parent  # .git directory
+    if git_dir.name == "microbeads-worktree":
+        git_dir = git_dir.parent  # Go up one more level
+
+    # Use repo.get_cache_dir if we can find the repo root
+    repo_root = git_dir.parent if git_dir.name == ".git" else None
+    if repo_root and repo_root.exists():
+        cache_dir = repo.get_cache_dir(repo_root)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / cache_file
+
+    return None
+
+
+def _get_issues_max_mtime(issues_dir: Path) -> float:
+    """Get the maximum modification time of all issue files in a directory."""
+    if not issues_dir.exists():
+        return 0.0
+
+    max_mtime = 0.0
+    for path in issues_dir.glob("*.json"):
+        try:
+            mtime = path.stat().st_mtime
+            if mtime > max_mtime:
+                max_mtime = mtime
+        except OSError:
+            continue
+
+    return max_mtime
+
+
+def _load_disk_cache(cache_path: Path, issues_dir: Path) -> dict[str, dict[str, Any]] | None:
+    """Load issues from disk cache if valid.
+
+    Returns None if cache is invalid or doesn't exist.
+    Cache is invalidated if any issue file is newer than the cache.
+    """
+    if not cache_path.exists():
+        return None
+
+    try:
+        cache_mtime = cache_path.stat().st_mtime
+        issues_max_mtime = _get_issues_max_mtime(issues_dir)
+
+        # Cache is invalid if any issue file is newer
+        if issues_max_mtime > cache_mtime:
+            return None
+
+        # Also check if directory has different file count than cache
+        # (handles deletions)
+        data = orjson.loads(cache_path.read_bytes())
+        cached_count = data.get("_count", 0)
+        actual_count = sum(1 for _ in issues_dir.glob("*.json")) if issues_dir.exists() else 0
+
+        if cached_count != actual_count:
+            return None
+
+        # Remove metadata and return issues
+        data.pop("_count", None)
+        return data
+
+    except (OSError, orjson.JSONDecodeError):
+        return None
+
+
+def _save_disk_cache(cache_path: Path, issues: dict[str, dict[str, Any]]) -> None:
+    """Save issues to disk cache."""
+    try:
+        # Add metadata for validation
+        data = dict(issues)
+        data["_count"] = len(issues)
+
+        cache_path.write_bytes(
+            orjson.dumps(data, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS)
+        )
+    except OSError:
+        pass  # Silently ignore cache write failures
+
+
+def _clear_disk_cache(worktree: Path) -> None:
+    """Delete disk cache files for a worktree.
+
+    Used after sync to ensure fresh data is loaded from git.
+    """
+    for cache_file in [_ACTIVE_CACHE_FILE, _CLOSED_CACHE_FILE]:
+        cache_path = _get_disk_cache_path(worktree, cache_file)
+        if cache_path and cache_path.exists():
+            try:
+                cache_path.unlink()
+            except OSError:
+                pass  # Silently ignore deletion failures
 
 
 class IssueType(str, Enum):
@@ -230,7 +341,7 @@ def create_issue(
 
 def issue_to_json(issue: dict[str, Any]) -> str:
     """Serialize issue to JSON with sorted keys."""
-    return json.dumps(issue, indent=2, sort_keys=True) + "\n"
+    return orjson.dumps(issue, option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS).decode() + "\n"
 
 
 class CorruptedFileError(ValueError):
@@ -250,11 +361,11 @@ def load_issue(path: Path) -> dict[str, Any]:
         FileNotFoundError: If the file doesn't exist
     """
     try:
-        content = path.read_text()
+        content = path.read_bytes()
         if not content.strip():
             raise CorruptedFileError(path, ValueError("File is empty"))
-        return json.loads(content)
-    except json.JSONDecodeError as e:
+        return orjson.loads(content)
+    except orjson.JSONDecodeError as e:
         raise CorruptedFileError(path, e) from e
 
 
@@ -374,10 +485,20 @@ def load_active_issues(worktree: Path, skip_corrupted: bool = True) -> dict[str,
     if not issues_dir.exists():
         return {}
 
+    # Check in-memory cache first
     cache_key = _get_active_cache_key(worktree)
     if cache_key in _active_cache:
         return _active_cache[cache_key]
 
+    # Check disk cache
+    disk_cache_path = _get_disk_cache_path(worktree, _ACTIVE_CACHE_FILE)
+    if disk_cache_path:
+        cached = _load_disk_cache(disk_cache_path, issues_dir)
+        if cached is not None:
+            _active_cache[cache_key] = cached
+            return cached
+
+    # Load from individual files
     issues = {}
     for path in issues_dir.glob("*.json"):
         try:
@@ -386,7 +507,12 @@ def load_active_issues(worktree: Path, skip_corrupted: bool = True) -> dict[str,
             if not skip_corrupted:
                 raise
             # Silently skip corrupted files when skip_corrupted is True
+
+    # Save to both caches
     _active_cache[cache_key] = issues
+    if disk_cache_path:
+        _save_disk_cache(disk_cache_path, issues)
+
     return issues
 
 
@@ -409,10 +535,20 @@ def load_closed_issues(worktree: Path, skip_corrupted: bool = True) -> dict[str,
     if not issues_dir.exists():
         return {}
 
+    # Check in-memory cache first
     cache_key = _get_closed_cache_key(worktree)
     if cache_key in _closed_cache:
         return _closed_cache[cache_key]
 
+    # Check disk cache
+    disk_cache_path = _get_disk_cache_path(worktree, _CLOSED_CACHE_FILE)
+    if disk_cache_path:
+        cached = _load_disk_cache(disk_cache_path, issues_dir)
+        if cached is not None:
+            _closed_cache[cache_key] = cached
+            return cached
+
+    # Load from individual files
     issues = {}
     for path in issues_dir.glob("*.json"):
         try:
@@ -421,7 +557,12 @@ def load_closed_issues(worktree: Path, skip_corrupted: bool = True) -> dict[str,
             if not skip_corrupted:
                 raise
             # Silently skip corrupted files when skip_corrupted is True
+
+    # Save to both caches
     _closed_cache[cache_key] = issues
+    if disk_cache_path:
+        _save_disk_cache(disk_cache_path, issues)
+
     return issues
 
 
@@ -1065,92 +1206,3 @@ def migrate_flat_to_status_dirs(worktree: Path) -> int:
     clear_cache(worktree)
 
     return migrated
-
-
-def compact_issue(issue: dict[str, Any]) -> dict[str, Any]:
-    """Create a compacted version of an issue for memory efficiency.
-
-    Keeps essential fields and removes verbose data like full description.
-    Only compacts closed issues.
-    """
-    if issue.get("status") != Status.CLOSED.value:
-        return issue
-
-    # Extract first line of description as summary
-    description = issue.get("description", "")
-    summary = description.split("\n")[0][:100] if description else ""
-
-    compacted = {
-        "id": issue["id"],
-        "title": issue["title"],
-        "status": Status.CLOSED.value,
-        "type": issue.get("type", IssueType.TASK.value),
-        "priority": issue.get("priority", 2),
-        "closed_at": issue.get("closed_at"),
-        "closed_reason": issue.get("closed_reason", ""),
-        "compacted": True,
-    }
-
-    # Keep summary if description was present
-    if summary:
-        compacted["summary"] = summary
-
-    # Keep dependency count for reference
-    deps = issue.get("dependencies", [])
-    if deps:
-        compacted["dependency_count"] = len(deps)
-
-    # Keep label count
-    labels = issue.get("labels", [])
-    if labels:
-        compacted["label_count"] = len(labels)
-
-    return compacted
-
-
-def compact_closed_issues(
-    worktree: Path,
-    older_than_days: int = 7,
-) -> dict[str, Any]:
-    """Compact closed issues older than specified days.
-
-    Returns dict with 'compacted' list and 'skipped' count.
-    """
-    from datetime import datetime, timedelta
-
-    all_issues = load_all_issues(worktree)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
-
-    compacted_list: list[dict[str, Any]] = []
-    skipped = 0
-
-    for issue_id, issue in all_issues.items():
-        # Skip non-closed issues
-        if issue.get("status") != Status.CLOSED.value:
-            continue
-
-        # Skip already compacted
-        if issue.get("compacted"):
-            skipped += 1
-            continue
-
-        # Check if closed_at is old enough
-        closed_at = issue.get("closed_at")
-        if closed_at:
-            try:
-                closed_dt = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
-                if closed_dt > cutoff:
-                    skipped += 1
-                    continue
-            except (ValueError, TypeError):
-                pass  # If we can't parse, compact it
-
-        # Compact the issue
-        compacted = compact_issue(issue)
-        save_issue(worktree, compacted)
-        compacted_list.append({"id": issue_id, "title": issue["title"]})
-
-    return {
-        "compacted": compacted_list,
-        "skipped": skipped,
-    }
