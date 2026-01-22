@@ -1,5 +1,12 @@
 """Command-line interface for microbeads."""
 
+# TODO: Add `bd beads-import` subcommand to import issues from the original beads CLI.
+#       - Assumes 'bd' (from beads reference implementation) is installed
+#       - Run `bd list --json` to get all issues from beads
+#       - Import each issue into microbeads, mapping fields appropriately
+#       - Must be idempotent: use issue ID to detect duplicates, skip or update existing
+#       - Consider: `bd beads-import --update` to overwrite existing vs skip
+
 import json
 import sys
 from typing import Any
