@@ -215,14 +215,16 @@ def sync(repo_root: Path, message: str | None = None) -> None:
     commit_msg = message or "Update issues"
     run_git("commit", "-m", commit_msg, cwd=worktree)
 
-    # Push (try to push, don't fail if remote doesn't exist)
+    # Push (try to push, don't fail if remote doesn't exist or permission denied)
     result = run_git("push", "-u", "origin", BRANCH_NAME, cwd=worktree, check=False)
     if result.returncode != 0:
-        # Check if it's because remote doesn't exist
+        # Check if it's because remote doesn't exist or permission issue
         if "does not appear to be a git repository" in result.stderr:
             pass  # No remote configured, that's OK
         elif "has no upstream branch" in result.stderr:
             # First push, set upstream
             run_git("push", "--set-upstream", "origin", BRANCH_NAME, cwd=worktree)
+        elif "403" in result.stderr or "Permission denied" in result.stderr:
+            pass  # Permission issue, skip push silently
         else:
             raise RuntimeError(f"Push failed: {result.stderr}")
