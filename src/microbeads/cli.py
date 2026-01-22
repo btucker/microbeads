@@ -248,8 +248,8 @@ def update_agents_md(repo_root: Path, json_output: bool = False) -> bool:
 
     modified = False
 
-    # Check if microbeads section already exists
-    if "## Microbeads" in content:
+    # Check if microbeads section already exists (various formats)
+    if "microbeads" in content.lower() and ("mb ready" in content or "mb sync" in content):
         if not json_output:
             click.echo("AGENTS.md: microbeads section already present")
         return False
