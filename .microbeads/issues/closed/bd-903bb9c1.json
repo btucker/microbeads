@@ -1,0 +1,28 @@
+{
+  "closed_at": "2026-01-22T11:29:34Z",
+  "closed_reason": "Implemented git worktree support using git-common-dir",
+  "created_at": "2026-01-22T11:17:40Z",
+  "dependencies": [],
+  "description": "Support multiple git worktrees with shared database architecture.",
+  "history": [
+    {
+      "at": "2026-01-22T11:28:11Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-22T11:29:34Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "bd-903bb9c1",
+  "labels": [],
+  "priority": 3,
+  "status": "closed",
+  "title": "Add git worktree support",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:29:34Z"
+}

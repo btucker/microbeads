@@ -1,0 +1,10 @@
+{
+  "closed_at": "2026-01-22T11:02:54Z",
+  "closed_reason": "Implemented active/closed directory structure",
+  "compacted": true,
+  "id": "bd-52e10ed5",
+  "priority": 3,
+  "status": "closed",
+  "title": "Optimize performance by organizing issues into status-based directories",
+  "type": "feature"
+}

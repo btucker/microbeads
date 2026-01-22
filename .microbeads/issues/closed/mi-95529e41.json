@@ -1,0 +1,31 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T13:08:54Z",
+  "closed_reason": "Added benchmarks for ready (200 issues with deps, 10x) and update (50 issues) operations",
+  "created_at": "2026-01-22T12:57:24Z",
+  "dependencies": [],
+  "description": "Add bd comparison benchmarks for: mb ready (list ready issues), mb update (edit issues)",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T13:06:52Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-22T13:08:54Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-95529e41",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "closed",
+  "title": "Add benchmarks for ready and edit operations",
+  "type": "task",
+  "updated_at": "2026-01-22T13:08:54Z"
+}

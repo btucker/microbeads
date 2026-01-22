@@ -1,0 +1,11 @@
+{
+  "closed_at": "2026-01-22T10:44:21Z",
+  "closed_reason": "Assessed as low priority optimization. Current implementation handles 10k issues in <10s for list operations (per performance tests). Index file adds complexity (sync issues, corruption handling, merge conflicts) without significant benefit for typical use cases (<1000 issues). Recommend implementing only if real-world usage shows performance problems. Current design is sufficient.",
+  "compacted": true,
+  "id": "bd-74ad",
+  "label_count": 1,
+  "priority": 4,
+  "status": "closed",
+  "title": "Add index file for faster queries",
+  "type": "feature"
+}
