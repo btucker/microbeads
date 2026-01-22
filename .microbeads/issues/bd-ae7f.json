@@ -1,6 +1,6 @@
 {
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-22T05:08:47Z",
+  "closed_reason": "Successfully using mb in this session",
   "created_at": "2026-01-22T05:07:45Z",
   "dependencies": [],
   "description": "",
@@ -9,8 +9,8 @@
     "dogfood"
   ],
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Test microbeads with real workflow",
   "type": "task",
-  "updated_at": "2026-01-22T05:07:56Z"
+  "updated_at": "2026-01-22T05:08:47Z"
 }
