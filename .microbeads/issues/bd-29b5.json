@@ -1,0 +1,18 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T06:05:35Z",
+  "dependencies": [
+    "bd-7d7a"
+  ],
+  "description": "Test init\u2192create\u2192list\u2192update\u2192close\u2192sync flow in temp git repo. Verify git history and JSON files.",
+  "id": "bd-29b5",
+  "labels": [
+    "testing"
+  ],
+  "priority": 1,
+  "status": "open",
+  "title": "E2E test: happy path workflow",
+  "type": "task",
+  "updated_at": "2026-01-22T06:06:57Z"
+}
