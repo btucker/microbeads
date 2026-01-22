@@ -1,0 +1,14 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T11:09:33Z",
+  "dependencies": [],
+  "description": "Implement a doctor command that detects problems like orphaned issues (committed work with unclosed tracking issues), stale state, and other inconsistencies. Include --fix flag for automatic remediation.",
+  "id": "bd-9803385f",
+  "labels": [],
+  "priority": 2,
+  "status": "open",
+  "title": "Add mb doctor command for health checks",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:09:33Z"
+}
