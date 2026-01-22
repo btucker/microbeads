@@ -37,9 +37,31 @@ def find_repo_root(start: Path | None = None) -> Path | None:
     return None
 
 
+def get_git_common_dir(repo_root: Path) -> Path:
+    """Get the common git directory (shared across worktrees).
+
+    For a regular repository, this returns .git
+    For a worktree, this returns the main repository's .git directory
+    """
+    result = run_git("rev-parse", "--git-common-dir", cwd=repo_root, check=False)
+    if result.returncode == 0:
+        common_dir = result.stdout.strip()
+        # --git-common-dir may return a relative path
+        if not Path(common_dir).is_absolute():
+            return (repo_root / common_dir).resolve()
+        return Path(common_dir)
+    # Fallback for older git versions
+    return repo_root / ".git"
+
+
 def get_worktree_path(repo_root: Path) -> Path:
-    """Get the path to the microbeads worktree."""
-    return repo_root / WORKTREE_DIR
+    """Get the path to the microbeads worktree.
+
+    Uses the common git directory to ensure all worktrees share the same
+    microbeads data.
+    """
+    git_common = get_git_common_dir(repo_root)
+    return git_common / "microbeads-worktree"
 
 
 def get_beads_path(worktree: Path) -> Path:
