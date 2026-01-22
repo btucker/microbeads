@@ -1,0 +1,16 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T06:05:27Z",
+  "dependencies": [],
+  "description": "Add pytest to dev dependencies, create tests/ directory, conftest.py with temp git repo fixtures",
+  "id": "bd-7d7a",
+  "labels": [
+    "testing"
+  ],
+  "priority": 1,
+  "status": "open",
+  "title": "Add pytest test infrastructure",
+  "type": "task",
+  "updated_at": "2026-01-22T06:05:27Z"
+}
