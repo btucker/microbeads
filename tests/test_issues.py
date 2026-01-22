@@ -939,3 +939,47 @@ class TestDiskCache:
         # Data should still be correct
         assert issue["id"] in loaded
         assert loaded[issue["id"]]["title"] == "Test Issue"
+
+    def test_clear_cache_include_disk_deletes_cache_files(self, mock_worktree_with_cache: Path):
+        """Test that clear_cache with include_disk=True deletes disk cache files."""
+        clear_cache()
+
+        # Create an issue and load to create disk cache
+        issue = create_issue("Test Issue", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue)
+        clear_cache()
+        load_active_issues(mock_worktree_with_cache)
+
+        # Verify disk cache was created
+        active_cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        assert active_cache_path is not None
+        assert active_cache_path.exists()
+
+        # Clear with include_disk=True
+        clear_cache(mock_worktree_with_cache, include_disk=True)
+
+        # Disk cache should be deleted
+        assert not active_cache_path.exists()
+
+    def test_clear_cache_without_include_disk_preserves_cache_files(
+        self, mock_worktree_with_cache: Path
+    ):
+        """Test that clear_cache without include_disk preserves disk cache files."""
+        clear_cache()
+
+        # Create an issue and load to create disk cache
+        issue = create_issue("Test Issue", mock_worktree_with_cache)
+        save_issue(mock_worktree_with_cache, issue)
+        clear_cache()
+        load_active_issues(mock_worktree_with_cache)
+
+        # Verify disk cache was created
+        active_cache_path = _get_disk_cache_path(mock_worktree_with_cache, _ACTIVE_CACHE_FILE)
+        assert active_cache_path is not None
+        assert active_cache_path.exists()
+
+        # Clear without include_disk (default)
+        clear_cache(mock_worktree_with_cache)
+
+        # Disk cache should still exist
+        assert active_cache_path.exists()

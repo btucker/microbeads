@@ -640,7 +640,7 @@ def sync(ctx: Context, message: str | None):
     """Commit and push changes to the microbeads branch."""
     repo.sync(ctx.repo_root, message)
     # Clear cache after sync since git may have updated files
-    issues.clear_cache(ctx.worktree)
+    issues.clear_cache(ctx.worktree, include_disk=True)
     output(ctx, {"status": "synced"}, "Changes synced.")
 
 
@@ -766,7 +766,7 @@ def prime():
 
     # Clear cache after sync since git may have updated files
     worktree = repo.get_worktree_path(repo_root)
-    issues.clear_cache(worktree)
+    issues.clear_cache(worktree, include_disk=True)
 
     # Check for custom PRIME.md override
     custom_prime = repo_root / ".microbeads" / "PRIME.md"

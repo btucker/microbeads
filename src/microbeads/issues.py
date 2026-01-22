@@ -67,12 +67,14 @@ def _remove_from_closed_cache(worktree: Path, issue_id: str) -> None:
         cache.pop(issue_id, None)
 
 
-def clear_cache(worktree: Path | None = None) -> None:
+def clear_cache(worktree: Path | None = None, include_disk: bool = False) -> None:
     """Clear the issues cache.
 
     Args:
         worktree: If provided, clear cache only for this worktree.
                   If None, clear all caches.
+        include_disk: If True, also delete disk cache files.
+                      Use after sync to ensure fresh data from git.
     """
     global _active_cache, _closed_cache
     if worktree is None:
@@ -81,6 +83,9 @@ def clear_cache(worktree: Path | None = None) -> None:
     else:
         _active_cache.pop(_get_active_cache_key(worktree), None)
         _closed_cache.pop(_get_closed_cache_key(worktree), None)
+
+        if include_disk:
+            _clear_disk_cache(worktree)
 
 
 def _get_disk_cache_path(worktree: Path, cache_file: str) -> Path | None:
@@ -168,6 +173,20 @@ def _save_disk_cache(cache_path: Path, issues: dict[str, dict[str, Any]]) -> Non
         )
     except OSError:
         pass  # Silently ignore cache write failures
+
+
+def _clear_disk_cache(worktree: Path) -> None:
+    """Delete disk cache files for a worktree.
+
+    Used after sync to ensure fresh data is loaded from git.
+    """
+    for cache_file in [_ACTIVE_CACHE_FILE, _CLOSED_CACHE_FILE]:
+        cache_path = _get_disk_cache_path(worktree, cache_file)
+        if cache_path and cache_path.exists():
+            try:
+                cache_path.unlink()
+            except OSError:
+                pass  # Silently ignore deletion failures
 
 
 class IssueType(str, Enum):

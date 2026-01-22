@@ -99,8 +99,8 @@ def get_cache_dir(repo_root: Path) -> Path:
 def derive_prefix(repo_root: Path) -> str:
     """Derive an issue ID prefix from the repository name.
 
-    Takes first letters of each word, or first 2-3 chars if single word.
-    Examples: "my-project" -> "mp", "microbeads" -> "mb", "foo_bar_baz" -> "fbb"
+    Takes first letters of each word, or first 2 chars if single word.
+    Examples: "my-project" -> "mp", "microbeads" -> "mi", "foo_bar_baz" -> "fbb"
     """
     name = repo_root.name.lower()
     # Split on common separators

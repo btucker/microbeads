@@ -446,7 +446,7 @@ class TestDiskCachePerformance:
             cold_times.append(time.perf_counter() - start)
 
         # Delete disk cache to measure truly cold load
-        from microbeads.issues import _get_disk_cache_path, _ACTIVE_CACHE_FILE
+        from microbeads.issues import _ACTIVE_CACHE_FILE, _get_disk_cache_path
 
         cache_path = _get_disk_cache_path(worktree, _ACTIVE_CACHE_FILE)
         if cache_path and cache_path.exists():
