@@ -134,6 +134,23 @@ Benefits:
 
 The `microbeads` orphan branch keeps issue data completely separate from your code.
 
+## Claude Code Integration
+
+Install hooks so Claude Code automatically loads workflow context:
+
+```bash
+# Install globally (all projects)
+mb setup claude
+
+# Or for this project only
+mb setup claude --project
+
+# Remove hooks
+mb setup claude --remove
+```
+
+This adds `SessionStart` and `PreCompact` hooks that run `mb prime` to remind the AI agent of the microbeads workflow.
+
 ## For AI Agents
 
 See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
