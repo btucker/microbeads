@@ -558,6 +558,8 @@ def dep_tree(ctx: Context, issue_id: str):
 def sync(ctx: Context, message: str | None):
     """Commit and push changes to the microbeads branch."""
     repo.sync(ctx.repo_root, message)
+    # Clear cache after sync since git may have updated files
+    issues.clear_cache(ctx.worktree)
     output(ctx, {"status": "synced"}, "Changes synced.")
 
 
@@ -592,6 +594,10 @@ def prime():
 
     # Sync to pull any remote changes
     repo.sync(repo_root)
+
+    # Clear cache after sync since git may have updated files
+    worktree = repo.get_worktree_path(repo_root)
+    issues.clear_cache(worktree)
 
     # Check for custom PRIME.md override
     custom_prime = repo_root / ".microbeads" / "PRIME.md"

@@ -9,6 +9,40 @@ from typing import Any
 
 from . import repo
 
+# In-memory cache for loaded issues, keyed by issues directory path
+_issues_cache: dict[str, dict[str, dict[str, Any]]] = {}
+
+
+def _get_cache_key(worktree: Path) -> str:
+    """Get the cache key for a worktree."""
+    return str(repo.get_issues_path(worktree))
+
+
+def _get_cache(worktree: Path) -> dict[str, dict[str, Any]] | None:
+    """Get cached issues for a worktree, or None if not cached."""
+    return _issues_cache.get(_get_cache_key(worktree))
+
+
+def _update_cache(worktree: Path, issue: dict[str, Any]) -> None:
+    """Update a single issue in the cache."""
+    cache = _get_cache(worktree)
+    if cache is not None:
+        cache[issue["id"]] = issue
+
+
+def clear_cache(worktree: Path | None = None) -> None:
+    """Clear the issues cache.
+
+    Args:
+        worktree: If provided, clear cache only for this worktree.
+                  If None, clear all caches.
+    """
+    global _issues_cache
+    if worktree is None:
+        _issues_cache = {}
+    else:
+        _issues_cache.pop(_get_cache_key(worktree), None)
+
 
 class IssueType(str, Enum):
     BUG = "bug"
@@ -83,12 +117,16 @@ def load_issue(path: Path) -> dict[str, Any]:
 
 
 def save_issue(worktree: Path, issue: dict[str, Any]) -> Path:
-    """Save an issue to a JSON file."""
+    """Save an issue to a JSON file and update cache."""
     issues_dir = repo.get_issues_path(worktree)
     issues_dir.mkdir(parents=True, exist_ok=True)
 
     path = issues_dir / f"{issue['id']}.json"
     path.write_text(issue_to_json(issue))
+
+    # Update cache if it exists
+    _update_cache(worktree, issue)
+
     return path
 
 
@@ -131,13 +169,19 @@ def resolve_issue_id(worktree: Path, issue_id: str) -> str | None:
 
 
 def load_all_issues(worktree: Path) -> dict[str, dict[str, Any]]:
-    """Load all issues into a dict keyed by ID. Single disk scan."""
+    """Load all issues into a dict keyed by ID. Uses caching for performance."""
     issues_dir = repo.get_issues_path(worktree)
 
     if not issues_dir.exists():
         return {}
 
-    return {path.stem: load_issue(path) for path in issues_dir.glob("*.json")}
+    cache_key = _get_cache_key(worktree)
+    if cache_key in _issues_cache:
+        return _issues_cache[cache_key]
+
+    issues = {path.stem: load_issue(path) for path in issues_dir.glob("*.json")}
+    _issues_cache[cache_key] = issues
+    return issues
 
 
 def list_issues(
