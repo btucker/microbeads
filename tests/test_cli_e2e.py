@@ -398,9 +398,7 @@ class TestLabels:
         """Test creating an issue with labels."""
         run_mb("init", cwd=e2e_repo)
 
-        result = run_mb(
-            "create", "Labeled issue", "-l", "frontend", "-l", "urgent", cwd=e2e_repo
-        )
+        result = run_mb("create", "Labeled issue", "-l", "frontend", "-l", "urgent", cwd=e2e_repo)
         assert result.returncode == 0
 
         result = run_mb("--json", "list", cwd=e2e_repo)
