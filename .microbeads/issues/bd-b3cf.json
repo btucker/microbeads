@@ -1,14 +1,14 @@
 {
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-22T05:16:55Z",
+  "closed_reason": "Working with session ID fallback",
   "created_at": "2026-01-22T05:13:56Z",
   "dependencies": [],
   "description": "",
   "id": "bd-b3cf",
   "labels": [],
   "priority": 3,
-  "status": "open",
+  "status": "closed",
   "title": "Test fallback push to claude/microbeads",
   "type": "task",
-  "updated_at": "2026-01-22T05:13:56Z"
+  "updated_at": "2026-01-22T05:16:55Z"
 }
