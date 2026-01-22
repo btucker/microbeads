@@ -877,5 +877,137 @@ def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
     click.echo("Claude hooks removed.")
 
 
+# Git hook script template
+GIT_HOOK_SCRIPT = """#!/bin/sh
+# Microbeads git hook - auto-sync issues
+# Installed by: mb setup hooks
+
+# Only run if microbeads is initialized
+if [ -d ".git/microbeads-worktree" ]; then
+    {cmd} sync 2>/dev/null || true
+fi
+"""
+
+
+@main.group()
+def hooks():
+    """Manage git hooks for automatic synchronization."""
+    pass
+
+
+@hooks.command("install")
+@click.option(
+    "--hook",
+    multiple=True,
+    type=click.Choice(["post-merge", "post-checkout", "pre-push"]),
+    help="Specific hooks to install (default: all)",
+)
+@pass_context
+def hooks_install(ctx: Context, hook: tuple):
+    """Install git hooks for automatic issue synchronization.
+
+    Installs hooks that automatically sync microbeads issues:
+    - post-merge: Sync after merging branches
+    - post-checkout: Sync after switching branches
+    - pre-push: Sync before pushing
+
+    These hooks ensure your local issues stay in sync with remote changes.
+    """
+    hooks_dir = ctx.repo_root / ".git" / "hooks"
+    hooks_to_process = list(hook) if hook else ["post-merge", "post-checkout", "pre-push"]
+    _install_git_hooks(hooks_dir, hooks_to_process)
+
+
+@hooks.command("remove")
+@click.option(
+    "--hook",
+    multiple=True,
+    type=click.Choice(["post-merge", "post-checkout", "pre-push"]),
+    help="Specific hooks to remove (default: all)",
+)
+@pass_context
+def hooks_remove(ctx: Context, hook: tuple):
+    """Remove microbeads git hooks."""
+    hooks_dir = ctx.repo_root / ".git" / "hooks"
+    hooks_to_process = list(hook) if hook else ["post-merge", "post-checkout", "pre-push"]
+    _remove_git_hooks(hooks_dir, hooks_to_process)
+
+
+def _install_git_hooks(hooks_dir: Path, hooks: list[str]) -> None:
+    """Install git hooks."""
+    click.echo("Installing git hooks...")
+
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    cmd = get_command_name()
+    script = GIT_HOOK_SCRIPT.format(cmd=cmd)
+
+    for hook_name in hooks:
+        hook_path = hooks_dir / hook_name
+
+        # Check if hook already exists
+        if hook_path.exists():
+            content = hook_path.read_text()
+            if "microbeads" in content.lower():
+                click.echo(f"  {hook_name}: already installed")
+                continue
+            else:
+                # Append to existing hook
+                click.echo(f"  {hook_name}: appending to existing hook")
+                content = content.rstrip() + "\n\n" + script
+                hook_path.write_text(content)
+        else:
+            hook_path.write_text(script)
+            click.echo(f"  {hook_name}: installed")
+
+        # Make executable
+        hook_path.chmod(0o755)
+
+    click.echo("\nGit hooks installed.")
+
+
+def _remove_git_hooks(hooks_dir: Path, hooks: list[str]) -> None:
+    """Remove git hooks."""
+    click.echo("Removing git hooks...")
+
+    for hook_name in hooks:
+        hook_path = hooks_dir / hook_name
+
+        if not hook_path.exists():
+            click.echo(f"  {hook_name}: not found")
+            continue
+
+        content = hook_path.read_text()
+        if "microbeads" not in content.lower():
+            click.echo(f"  {hook_name}: no microbeads hook found")
+            continue
+
+        # Check if this is a microbeads-only hook or mixed
+        lines = content.split("\n")
+        non_microbeads_lines = []
+        in_microbeads_section = False
+
+        for line in lines:
+            if "Microbeads git hook" in line:
+                in_microbeads_section = True
+            elif in_microbeads_section and line.strip() == "fi":
+                in_microbeads_section = False
+                continue
+            elif not in_microbeads_section:
+                non_microbeads_lines.append(line)
+
+        # Check if anything remains
+        remaining = "\n".join(non_microbeads_lines).strip()
+        if remaining and remaining != "#!/bin/sh":
+            # Keep the non-microbeads parts
+            hook_path.write_text(remaining + "\n")
+            click.echo(f"  {hook_name}: removed microbeads section")
+        else:
+            # Remove the entire hook file
+            hook_path.unlink()
+            click.echo(f"  {hook_name}: removed")
+
+    click.echo("Git hooks removed.")
+
+
 if __name__ == "__main__":
     main()
