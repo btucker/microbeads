@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uvx microbeads prime"
+            "command": "uv run mb prime"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uvx microbeads prime"
+            "command": "uv run mb prime"
           }
         ]
       }
