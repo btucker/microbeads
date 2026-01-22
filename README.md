@@ -286,12 +286,12 @@ Microbeads focuses on the essentials for AI agent issue tracking, without the co
 
 ### Benchmarks (vs `bd`)
 
-| Operation | mb | bd | Ratio |
-|-----------|-----|-----|-------|
-| List 500 issues (10x) | 0.93s | 0.70s | 0.75x |
-| Ready 200 issues (10x) | 0.85s | 0.65s | 0.76x |
-| Update 50 issues | 4.2s | 2.1s | 0.50x |
-| Create 100 issues | 8.5s | 4.2s | 0.49x |
+| Operation | mb | bd |
+|-----------|-----|-----|
+| List 500 issues (10x) | 0.93s | 0.70s |
+| Ready 200 issues (10x) | 0.85s | 0.65s |
+| Update 50 issues | 4.2s | 2.1s |
+| Create 100 issues | 8.5s | 4.2s |
 
 The gap is primarily Python interpreter startup overhead (~100ms per invocation).
 
