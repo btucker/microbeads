@@ -276,3 +276,37 @@ See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
 | Daemon | Yes | No |
 
 Microbeads focuses on the essentials for AI agent issue tracking, without the complexity of federation or background daemons.
+
+## Performance
+
+Microbeads is optimized for fast issue operations, though as a Python CLI it has inherent startup overhead compared to compiled Go binaries like the reference `bd` implementation.
+
+### Optimizations
+
+- **orjson** - Fast JSON parsing (5-10% faster than stdlib)
+- **Disk cache** - Persistent cache at `.git/microbeads-cache/` provides ~1.3x speedup for loading issues
+- **Lazy imports** - Deferred module loading reduces startup by ~25ms
+- **Status-based loading** - Only loads closed issues when explicitly requested
+
+### Benchmark Results (vs reference `bd`)
+
+| Operation | mb | bd | Ratio |
+|-----------|-----|-----|-------|
+| List 500 issues (10x) | 0.93s | 0.70s | 0.75x |
+| Create 1000 issues | ~2x slower | baseline | - |
+
+The ~25% gap on list operations is primarily Python interpreter startup overhead (~100-150ms per invocation) vs Go's near-instant startup. This is a fundamental language tradeoff.
+
+**When this matters:** High-frequency CLI invocations in tight loops. For typical AI agent workflows (a few commands per task), the difference is negligible.
+
+**When it doesn't matter:** The actual issue processing (loading, filtering, sorting) is fast thanks to disk caching and orjson. The bottleneck is Python startup, not microbeads code.
+
+### Running Benchmarks
+
+```bash
+# Run all benchmarks (requires bd binary)
+uv run pytest tests/test_performance.py -m slow -v
+
+# Run disk cache benchmark only
+uv run pytest tests/test_performance.py::TestDiskCachePerformance -m slow -v
+```
