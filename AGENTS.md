@@ -2,12 +2,11 @@
 
 Microbeads is a simplified git-backed issue tracker designed for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch.
 
+**Note:** Initialization (`uvx microbeads init`) is done by the human before agent sessions begin.
+
 ## Quick Reference
 
 ```bash
-# Initialize (once per repo)
-uvx microbeads init
-
 # Create issues
 uvx microbeads create "Fix authentication bug" -p 1 -t bug -l backend
 uvx microbeads create "Add user dashboard" -p 2 -t feature -d "Description here"

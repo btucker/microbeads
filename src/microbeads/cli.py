@@ -1,13 +1,7 @@
 """Command-line interface for microbeads."""
 
-# TODO: Add `bd beads-import` subcommand to import issues from the original beads CLI.
-#       - Assumes 'bd' (from beads reference implementation) is installed
-#       - Run `bd list --json` to get all issues from beads
-#       - Import each issue into microbeads, mapping fields appropriately
-#       - Must be idempotent: use issue ID to detect duplicates, skip or update existing
-#       - Consider: `bd beads-import --update` to overwrite existing vs skip
-
 import json
+import subprocess
 import sys
 from typing import Any
 
@@ -132,14 +126,82 @@ def main(ctx, json_output: bool):
     ctx.obj.json_output = json_output
 
 
+def import_from_beads(worktree, json_output: bool = False) -> int:
+    """Import issues from the reference beads CLI.
+
+    Returns the number of issues imported.
+    """
+    # Check if bd is available
+    result = subprocess.run(["bd", "--version"], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise click.ClickException("'bd' (beads CLI) not found. Install it first or skip import.")
+
+    # Get all issues from beads
+    result = subprocess.run(["bd", "list", "--json", "-s", "open"], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise click.ClickException(f"Failed to get issues from beads: {result.stderr}")
+
+    try:
+        beads_issues = json.loads(result.stdout) if result.stdout.strip() else []
+    except json.JSONDecodeError:
+        raise click.ClickException(f"Failed to parse beads output: {result.stdout}")
+
+    imported = 0
+    skipped = 0
+
+    for beads_issue in beads_issues:
+        issue_id = beads_issue.get("id")
+        if not issue_id:
+            continue
+
+        # Check if already exists
+        existing = issues.get_issue(worktree, issue_id)
+        if existing:
+            skipped += 1
+            continue
+
+        # Map beads fields to microbeads format
+        issue = {
+            "closed_at": beads_issue.get("closed_at"),
+            "closed_reason": beads_issue.get("close_reason"),
+            "created_at": beads_issue.get("created_at"),
+            "dependencies": [d.get("depends_on") for d in beads_issue.get("dependencies", []) if d.get("depends_on")],
+            "description": beads_issue.get("description", ""),
+            "id": issue_id,
+            "labels": beads_issue.get("labels", []),
+            "priority": beads_issue.get("priority", 2),
+            "status": beads_issue.get("status", "open"),
+            "title": beads_issue.get("title", ""),
+            "type": beads_issue.get("issue_type", "task"),
+            "updated_at": beads_issue.get("updated_at"),
+        }
+
+        issues.save_issue(worktree, issue)
+        imported += 1
+
+    if not json_output:
+        if imported > 0:
+            click.echo(f"Imported {imported} issues from beads.")
+        if skipped > 0:
+            click.echo(f"Skipped {skipped} existing issues.")
+
+    return imported
+
+
 @main.command()
+@click.option("--import-beads", is_flag=True, help="Import issues from existing beads installation")
 @pass_context
-def init(ctx: Context):
+def init(ctx: Context, import_beads: bool):
     """Initialize microbeads in this repository."""
     worktree = repo.init(ctx.repo_root)
+
+    imported = 0
+    if import_beads:
+        imported = import_from_beads(worktree, ctx.json_output)
+
     output(
         ctx,
-        {"status": "initialized", "worktree": str(worktree)},
+        {"status": "initialized", "worktree": str(worktree), "imported": imported},
         f"Microbeads initialized. Issues stored on orphan branch '{repo.BRANCH_NAME}'.",
     )
 

@@ -13,6 +13,8 @@ dependencies = [
 
 [project.scripts]
 bd = "microbeads.cli:main"
+mb = "microbeads.cli:main"
+microbeads = "microbeads.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/microbeads"]
