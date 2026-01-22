@@ -1,13 +1,38 @@
 """Command-line interface for microbeads."""
 
 import json
+import os
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import click
 
 from . import issues, merge, repo
+
+
+# Condensed workflow instructions for Claude Code hooks
+PRIME_CONTENT = """# Microbeads Issue Tracking
+
+## Quick Commands
+```
+mb ready                         # See what to work on
+mb update <id> -s in_progress    # Start work
+mb create "title" -p N -t type   # Create issue
+mb close <id> -r "reason"        # Complete work
+mb sync                          # Save to git
+```
+
+## Session End Protocol
+1. Close completed issues: `mb close <id> -r "reason"`
+2. Create issues for remaining work
+3. Sync: `mb sync && git push`
+
+## Status: open | in_progress | blocked | closed
+## Priority: P0 (critical) to P4 (low)
+## Types: bug | feature | task | epic | chore
+"""
 
 
 class Context:
@@ -425,6 +450,161 @@ def sync(ctx: Context, message: str | None):
 def merge_driver(base_path: str, ours_path: str, theirs_path: str):
     """Git merge driver for JSON files (internal use)."""
     sys.exit(merge.merge_json_files(base_path, ours_path, theirs_path))
+
+
+@main.command()
+def prime():
+    """Output workflow context for AI agents.
+
+    Designed for Claude Code hooks (SessionStart, PreCompact) to remind
+    agents of the microbeads workflow after context compaction.
+    """
+    # Check if we're in a microbeads project
+    repo_root = repo.find_repo_root()
+    if repo_root is None or not repo.is_initialized(repo_root):
+        # Silent exit - not in a microbeads project
+        sys.exit(0)
+
+    # Check for custom PRIME.md override
+    custom_prime = repo_root / ".microbeads" / "PRIME.md"
+    if custom_prime.exists():
+        click.echo(custom_prime.read_text())
+    else:
+        click.echo(PRIME_CONTENT)
+
+
+@main.group()
+def setup():
+    """Setup integrations."""
+    pass
+
+
+@setup.command("claude")
+@click.option("--project", is_flag=True, help="Install for this project only (default: global)")
+@click.option("--remove", is_flag=True, help="Remove hooks instead of installing")
+def setup_claude(project: bool, remove: bool):
+    """Install Claude Code hooks for microbeads.
+
+    Adds SessionStart and PreCompact hooks that run 'mb prime' to remind
+    the AI agent of the microbeads workflow.
+    """
+    # Determine settings path
+    if project:
+        settings_dir = Path.cwd() / ".claude"
+        settings_path = settings_dir / "settings.local.json"
+        scope = "project"
+    else:
+        home = Path.home()
+        settings_dir = home / ".claude"
+        settings_path = settings_dir / "settings.json"
+        scope = "global"
+
+    if remove:
+        _remove_claude_hooks(settings_path, scope)
+    else:
+        _install_claude_hooks(settings_dir, settings_path, scope)
+
+
+def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -> None:
+    """Install Claude Code hooks."""
+    click.echo(f"Installing Claude hooks ({scope})...")
+
+    # Ensure directory exists
+    settings_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load existing settings
+    settings: dict = {}
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+        except json.JSONDecodeError:
+            click.echo(f"Warning: Could not parse {settings_path}, creating new file")
+
+    # Get or create hooks section
+    hooks = settings.setdefault("hooks", {})
+
+    # Add mb prime to SessionStart and PreCompact
+    command = "mb prime"
+    hook_entry = {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": command}]
+    }
+
+    for event in ["SessionStart", "PreCompact"]:
+        event_hooks = hooks.get(event, [])
+        if not isinstance(event_hooks, list):
+            event_hooks = []
+
+        # Check if already installed
+        already_installed = False
+        for hook in event_hooks:
+            if isinstance(hook, dict):
+                for h in hook.get("hooks", []):
+                    if isinstance(h, dict) and h.get("command") == command:
+                        already_installed = True
+                        break
+
+        if already_installed:
+            click.echo(f"  {event}: already installed")
+        else:
+            event_hooks.append(hook_entry)
+            hooks[event] = event_hooks
+            click.echo(f"  {event}: installed")
+
+    # Write settings
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+
+    click.echo(f"\nClaude hooks installed: {settings_path}")
+    click.echo("Restart Claude Code for changes to take effect.")
+
+
+def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
+    """Remove Claude Code hooks."""
+    click.echo(f"Removing Claude hooks ({scope})...")
+
+    if not settings_path.exists():
+        click.echo("No settings file found.")
+        return
+
+    try:
+        settings = json.loads(settings_path.read_text())
+    except json.JSONDecodeError:
+        click.echo(f"Could not parse {settings_path}")
+        return
+
+    hooks = settings.get("hooks", {})
+    command = "mb prime"
+
+    for event in ["SessionStart", "PreCompact"]:
+        event_hooks = hooks.get(event, [])
+        if not isinstance(event_hooks, list):
+            continue
+
+        # Filter out mb prime hooks
+        filtered = []
+        removed = False
+        for hook in event_hooks:
+            if isinstance(hook, dict):
+                hook_commands = hook.get("hooks", [])
+                has_mb_prime = any(
+                    isinstance(h, dict) and h.get("command") == command
+                    for h in hook_commands
+                )
+                if has_mb_prime:
+                    removed = True
+                    continue
+            filtered.append(hook)
+
+        if removed:
+            if filtered:
+                hooks[event] = filtered
+            else:
+                del hooks[event]
+            click.echo(f"  {event}: removed")
+
+    # Write settings
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    click.echo("Claude hooks removed.")
 
 
 if __name__ == "__main__":
