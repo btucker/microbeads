@@ -9,6 +9,8 @@ BRANCH_NAME = "microbeads"
 WORKTREE_DIR = ".git/microbeads-worktree"
 BEADS_DIR = ".microbeads"
 ISSUES_DIR = ".microbeads/issues"
+ACTIVE_ISSUES_DIR = ".microbeads/issues/active"
+CLOSED_ISSUES_DIR = ".microbeads/issues/closed"
 
 
 def run_git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
@@ -48,6 +50,16 @@ def get_beads_path(worktree: Path) -> Path:
 def get_issues_path(worktree: Path) -> Path:
     """Get the path to the issues directory in the worktree."""
     return worktree / ISSUES_DIR
+
+
+def get_active_issues_path(worktree: Path) -> Path:
+    """Get the path to active issues directory (open, in_progress, blocked)."""
+    return worktree / ACTIVE_ISSUES_DIR
+
+
+def get_closed_issues_path(worktree: Path) -> Path:
+    """Get the path to closed issues directory."""
+    return worktree / CLOSED_ISSUES_DIR
 
 
 def derive_prefix(repo_root: Path) -> str:
@@ -143,8 +155,10 @@ def init(repo_root: Path) -> Path:
                     item.unlink()
 
         # Create the microbeads directory structure
-        issues_dir = get_issues_path(worktree)
-        issues_dir.mkdir(parents=True, exist_ok=True)
+        active_dir = get_active_issues_path(worktree)
+        closed_dir = get_closed_issues_path(worktree)
+        active_dir.mkdir(parents=True, exist_ok=True)
+        closed_dir.mkdir(parents=True, exist_ok=True)
 
         # Create metadata file
         import json
