@@ -17,8 +17,6 @@ from microbeads.issues import (
     add_dependency,
     clear_cache,
     close_issue,
-    compact_closed_issues,
-    compact_issue,
     create_issue,
     generate_id,
     get_blocked_issues,
@@ -1272,99 +1270,3 @@ class TestDiskCache:
 
         # Disk cache should still exist
         assert active_cache_path.exists()
-
-
-class TestCompactCommand:
-    """Tests for issue compaction."""
-
-    def test_compact_issue_closed(self):
-        """Test that compact_issue removes verbose fields from closed issues."""
-        issue = {
-            "id": "test-1234",
-            "title": "Completed feature",
-            "status": "closed",
-            "type": "feature",
-            "priority": 1,
-            "description": "Long description\nwith multiple lines",
-            "labels": ["frontend", "urgent"],
-            "dependencies": ["test-0001", "test-0002"],
-            "history": [{"field": "status", "old": "open", "new": "closed"}],
-            "closed_at": "2024-01-01T00:00:00Z",
-            "closed_reason": "Done",
-            "design": "Some design notes",
-            "notes": "Some notes",
-        }
-
-        compacted = compact_issue(issue, use_llm=False)
-
-        # Essential fields preserved
-        assert compacted["id"] == "test-1234"
-        assert compacted["title"] == "Completed feature"
-        assert compacted["status"] == "closed"
-        assert compacted["type"] == "feature"
-        assert compacted["priority"] == 1
-        assert compacted["closed_at"] == "2024-01-01T00:00:00Z"
-        assert compacted["closed_reason"] == "Done"
-        assert compacted["compacted"] is True
-
-        # Verbose fields removed
-        assert "description" not in compacted
-        assert "history" not in compacted
-        assert "design" not in compacted
-        assert "notes" not in compacted
-        assert "dependencies" not in compacted
-
-        # Labels preserved (useful for searching)
-        assert compacted["labels"] == ["frontend", "urgent"]
-
-        # Summary from first line of description (LLM fallback)
-        assert compacted["summary"] == "Long description"
-
-    def test_compact_issue_skips_open(self):
-        """Test that compact_issue doesn't modify open issues."""
-        issue = {
-            "id": "test-1234",
-            "title": "Open issue",
-            "status": "open",
-            "description": "Some description",
-        }
-
-        compacted = compact_issue(issue, use_llm=False)
-
-        # Should return unchanged
-        assert compacted == issue
-
-    def test_compact_closed_issues_respects_age(self, mock_worktree: Path):
-        """Test that compact only affects issues older than threshold."""
-        # Create old closed issue
-        old_issue = create_issue("Old issue", mock_worktree)
-        old_issue["status"] = "closed"
-        old_issue["closed_at"] = "2020-01-01T00:00:00Z"
-        save_issue(mock_worktree, old_issue)
-
-        # Create recent closed issue
-        recent_issue = create_issue("Recent issue", mock_worktree)
-        recent_issue["status"] = "closed"
-        recent_issue["closed_at"] = now_iso()
-        save_issue(mock_worktree, recent_issue)
-
-        # Compact with 7 day threshold
-        result = compact_closed_issues(mock_worktree, older_than_days=7)
-
-        # Only old issue should be compacted
-        assert len(result["compacted"]) == 1
-        assert result["compacted"][0]["id"] == old_issue["id"]
-
-    def test_compact_closed_issues_skips_already_compacted(self, mock_worktree: Path):
-        """Test that already compacted issues are skipped."""
-        issue = create_issue("Old issue", mock_worktree)
-        issue["status"] = "closed"
-        issue["closed_at"] = "2020-01-01T00:00:00Z"
-        issue["compacted"] = True
-        save_issue(mock_worktree, issue)
-
-        result = compact_closed_issues(mock_worktree, older_than_days=7)
-
-        # Should be skipped
-        assert len(result["compacted"]) == 0
-        assert result["skipped"] == 1
