@@ -1,7 +1,6 @@
 """Command-line interface for microbeads."""
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -11,7 +10,6 @@ from typing import Any
 import click
 
 from . import issues, merge, repo
-
 
 # Condensed workflow instructions for Claude Code hooks
 PRIME_TEMPLATE = """# Microbeads Issue Tracking
@@ -94,12 +92,12 @@ def output(ctx: Context, data: Any, human_format: str | None = None) -> None:
 def format_issue_line(issue: dict[str, Any]) -> str:
     """Format an issue as a single line for list output."""
     status_icons = {
-        "open": " ",
-        "in_progress": "▶",
+        "open": "○",
+        "in_progress": "◐",
         "blocked": "⊗",
-        "closed": "✓",
+        "closed": "●",
     }
-    icon = status_icons.get(issue.get("status", "open"), " ")
+    icon = status_icons.get(issue.get("status", "open"), "○")
     priority = issue.get("priority", 2)
     labels = ",".join(issue.get("labels", []))
     labels_str = f" [{labels}]" if labels else ""
@@ -186,8 +184,8 @@ def import_from_beads(worktree, json_output: bool = False) -> int:
 
     try:
         beads_issues = json.loads(result.stdout) if result.stdout.strip() else []
-    except json.JSONDecodeError:
-        raise click.ClickException(f"Failed to parse beads output: {result.stdout}")
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"Failed to parse beads output: {result.stdout}") from exc
 
     imported = 0
     skipped = 0
@@ -208,7 +206,11 @@ def import_from_beads(worktree, json_output: bool = False) -> int:
             "closed_at": beads_issue.get("closed_at"),
             "closed_reason": beads_issue.get("close_reason"),
             "created_at": beads_issue.get("created_at"),
-            "dependencies": [d.get("depends_on") for d in beads_issue.get("dependencies", []) if d.get("depends_on")],
+            "dependencies": [
+                d.get("depends_on")
+                for d in beads_issue.get("dependencies", [])
+                if d.get("depends_on")
+            ],
             "description": beads_issue.get("description", ""),
             "id": issue_id,
             "labels": beads_issue.get("labels", []),
@@ -257,30 +259,30 @@ def update_agents_md(repo_root: Path, json_output: bool = False) -> bool:
     # Pattern matches section starting with ## that contains "bd " commands until next ## or end
     beads_patterns = [
         # Match "## Beads" or "## Beads Issue Tracking" section
-        r'## Beads[^\n]*\n(?:(?!## ).)*',
+        r"## Beads[^\n]*\n(?:(?!## ).)*",
         # Match any section containing "bd " commands (reference beads CLI)
-        r'## [^\n]*\n(?:(?!## )(?:.*\bbd\s+\w+.*\n|[^\n]*\n))*(?=## |\Z)',
+        r"## [^\n]*\n(?:(?!## )(?:.*\bbd\s+\w+.*\n|[^\n]*\n))*(?=## |\Z)",
     ]
 
     for pattern in beads_patterns:
         if re.search(pattern, content, re.MULTILINE | re.DOTALL):
             # Only remove if it contains bd commands
             match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
-            if match and 'bd ' in match.group(0):
-                content = re.sub(pattern, '', content, flags=re.MULTILINE | re.DOTALL)
+            if match and "bd " in match.group(0):
+                content = re.sub(pattern, "", content, flags=re.MULTILINE | re.DOTALL)
                 modified = True
                 if not json_output:
                     click.echo("AGENTS.md: removed beads section")
 
     # Clean up multiple blank lines
-    content = re.sub(r'\n{3,}', '\n\n', content)
+    content = re.sub(r"\n{3,}", "\n\n", content)
 
     # Append microbeads section (reuse PRIME_TEMPLATE)
     cmd = get_command_name()
     section = PRIME_TEMPLATE.format(cmd=cmd)
 
-    if not content.endswith('\n'):
-        content += '\n'
+    if not content.endswith("\n"):
+        content += "\n"
     content += section
     modified = True
 
@@ -315,14 +317,22 @@ def init(ctx: Context, import_beads: bool):
 @main.command()
 @click.argument("title")
 @click.option("-d", "--description", default="", help="Issue description")
-@click.option("-t", "--type", "issue_type", default="task",
-              type=click.Choice(["bug", "feature", "task", "epic", "chore"]),
-              help="Issue type")
-@click.option("-p", "--priority", default=2, type=click.IntRange(0, 4),
-              help="Priority (0=critical, 4=low)")
+@click.option(
+    "-t",
+    "--type",
+    "issue_type",
+    default="task",
+    type=click.Choice(["bug", "feature", "task", "epic", "chore"]),
+    help="Issue type",
+)
+@click.option(
+    "-p", "--priority", default=2, type=click.IntRange(0, 4), help="Priority (0=critical, 4=low)"
+)
 @click.option("-l", "--label", multiple=True, help="Labels (can specify multiple)")
 @pass_context
-def create(ctx: Context, title: str, description: str, issue_type: str, priority: int, label: tuple):
+def create(
+    ctx: Context, title: str, description: str, issue_type: str, priority: int, label: tuple
+):
     """Create a new issue."""
     issue = issues.create_issue(
         title=title,
@@ -337,15 +347,29 @@ def create(ctx: Context, title: str, description: str, issue_type: str, priority
 
 
 @main.command("list")
-@click.option("-s", "--status", type=click.Choice(["open", "in_progress", "blocked", "closed"]),
-              help="Filter by status")
+@click.option(
+    "-s",
+    "--status",
+    type=click.Choice(["open", "in_progress", "blocked", "closed"]),
+    help="Filter by status",
+)
 @click.option("-p", "--priority", type=click.IntRange(0, 4), help="Filter by priority")
 @click.option("-l", "--label", help="Filter by label")
-@click.option("-t", "--type", "issue_type",
-              type=click.Choice(["bug", "feature", "task", "epic", "chore"]),
-              help="Filter by type")
+@click.option(
+    "-t",
+    "--type",
+    "issue_type",
+    type=click.Choice(["bug", "feature", "task", "epic", "chore"]),
+    help="Filter by type",
+)
 @pass_context
-def list_cmd(ctx: Context, status: str | None, priority: int | None, label: str | None, issue_type: str | None):
+def list_cmd(
+    ctx: Context,
+    status: str | None,
+    priority: int | None,
+    label: str | None,
+    issue_type: str | None,
+):
     """List issues."""
     status_enum = issues.Status(status) if status else None
     type_enum = issues.IssueType(issue_type) if issue_type else None
@@ -382,8 +406,12 @@ def show(ctx: Context, issue_id: str):
 
 @main.command()
 @click.argument("issue_id")
-@click.option("-s", "--status", type=click.Choice(["open", "in_progress", "blocked", "closed"]),
-              help="Update status")
+@click.option(
+    "-s",
+    "--status",
+    type=click.Choice(["open", "in_progress", "blocked", "closed"]),
+    help="Update status",
+)
 @click.option("-p", "--priority", type=click.IntRange(0, 4), help="Update priority")
 @click.option("-t", "--title", help="Update title")
 @click.option("-d", "--description", help="Update description")
@@ -391,8 +419,17 @@ def show(ctx: Context, issue_id: str):
 @click.option("--add-label", multiple=True, help="Add labels")
 @click.option("--remove-label", multiple=True, help="Remove labels")
 @pass_context
-def update(ctx: Context, issue_id: str, status: str | None, priority: int | None,
-           title: str | None, description: str | None, label: tuple, add_label: tuple, remove_label: tuple):
+def update(
+    ctx: Context,
+    issue_id: str,
+    status: str | None,
+    priority: int | None,
+    title: str | None,
+    description: str | None,
+    label: tuple,
+    add_label: tuple,
+    remove_label: tuple,
+):
     """Update an issue."""
     try:
         status_enum = issues.Status(status) if status else None
@@ -409,7 +446,7 @@ def update(ctx: Context, issue_id: str, status: str | None, priority: int | None
         )
         output(ctx, issue, f"Updated {issue['id']}")
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from None
 
 
 @main.command()
@@ -422,7 +459,7 @@ def close(ctx: Context, issue_id: str, reason: str):
         issue = issues.close_issue(ctx.worktree, issue_id, reason)
         output(ctx, issue, f"Closed {issue['id']}")
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from None
 
 
 @main.command()
@@ -434,7 +471,7 @@ def reopen(ctx: Context, issue_id: str):
         issue = issues.reopen_issue(ctx.worktree, issue_id)
         output(ctx, issue, f"Reopened {issue['id']}")
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from None
 
 
 @main.command()
@@ -487,7 +524,7 @@ def dep_add(ctx: Context, child_id: str, parent_id: str):
         issue = issues.add_dependency(ctx.worktree, child_id, parent_id)
         output(ctx, issue, f"{issue['id']} now depends on {parent_id}")
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from None
 
 
 @dep.command("rm")
@@ -500,7 +537,7 @@ def dep_rm(ctx: Context, child_id: str, parent_id: str):
         issue = issues.remove_dependency(ctx.worktree, child_id, parent_id)
         output(ctx, issue, f"Removed dependency from {issue['id']} to {parent_id}")
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from None
 
 
 @dep.command("tree")
@@ -626,10 +663,7 @@ def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -
     # Add uvx microbeads prime to SessionStart and PreCompact
     # Using uvx ensures it works without global installation
     command = "uvx microbeads prime"
-    hook_entry = {
-        "matcher": "",
-        "hooks": [{"type": "command", "command": command}]
-    }
+    hook_entry = {"matcher": "", "hooks": [{"type": "command", "command": command}]}
 
     for event in ["SessionStart", "PreCompact"]:
         event_hooks = hooks.get(event, [])

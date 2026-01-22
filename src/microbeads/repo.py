@@ -72,6 +72,7 @@ def derive_prefix(repo_root: Path) -> str:
 def get_prefix(worktree: Path) -> str:
     """Get the issue ID prefix from metadata."""
     import json
+
     metadata_path = get_beads_path(worktree) / "metadata.json"
     if metadata_path.exists():
         metadata = json.loads(metadata_path.read_text())
@@ -91,7 +92,9 @@ def branch_exists(repo_root: Path, branch: str = BRANCH_NAME) -> bool:
     return result.returncode == 0
 
 
-def remote_branch_exists(repo_root: Path, branch: str = BRANCH_NAME, remote: str = "origin") -> bool:
+def remote_branch_exists(
+    repo_root: Path, branch: str = BRANCH_NAME, remote: str = "origin"
+) -> bool:
     """Check if the remote branch exists."""
     result = run_git("ls-remote", "--heads", remote, branch, cwd=repo_root, check=False)
     return result.returncode == 0 and branch in result.stdout
@@ -132,6 +135,7 @@ def init(repo_root: Path) -> Path:
             if item.name != ".git":
                 if item.is_dir():
                     import shutil
+
                     shutil.rmtree(item)
                 else:
                     item.unlink()
@@ -142,11 +146,9 @@ def init(repo_root: Path) -> Path:
 
         # Create metadata file
         import json
+
         prefix = derive_prefix(repo_root)
-        metadata = {
-            "version": "0.1.0",
-            "id_prefix": prefix
-        }
+        metadata = {"version": "0.1.0", "id_prefix": prefix}
         metadata_path = get_beads_path(worktree) / "metadata.json"
         metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 
@@ -237,10 +239,7 @@ def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> lis
             continue  # Don't delete canonical branch
 
         # Try to merge (allow conflicts to be auto-resolved by merge driver)
-        result = run_git(
-            "pull", "--no-edit", "origin", branch,
-            cwd=worktree, check=False
-        )
+        result = run_git("pull", "--no-edit", "origin", branch, cwd=worktree, check=False)
         if result.returncode == 0:
             merged_branches.append(branch)
         elif "CONFLICT" not in result.stdout:
@@ -253,28 +252,13 @@ def _cleanup_stale_branches(worktree: Path, branches: list[str]) -> None:
     """Delete stale remote branches that have been merged."""
     for branch in branches:
         # Delete remote branch
-        result = run_git(
-            "push", "origin", "--delete", branch,
-            cwd=worktree, check=False
-        )
         # Ignore errors (might not have permission, branch might be gone, etc.)
+        run_git("push", "origin", "--delete", branch, cwd=worktree, check=False)
 
 
 def sync(repo_root: Path, message: str | None = None) -> None:
     """Commit and push changes to the microbeads branch."""
     worktree = ensure_worktree(repo_root)
-
-    # Check for changes
-    result = run_git("status", "--porcelain", cwd=worktree)
-    if not result.stdout.strip():
-        return  # No changes
-
-    # Stage all changes
-    run_git("add", ".", cwd=worktree)
-
-    # Commit
-    commit_msg = message or "Update issues"
-    run_git("commit", "-m", commit_msg, cwd=worktree)
 
     # Determine push target - detect Claude Code web environment
     push_target = BRANCH_NAME
@@ -288,12 +272,27 @@ def sync(repo_root: Path, message: str | None = None) -> None:
             push_target = f"claude/{BRANCH_NAME}-{session_id}"
 
     # Fetch and merge any existing microbeads branches to stay in sync
+    # Do this BEFORE checking for local changes, so we always pull remote state
     stale_branches = []
     if session_id:
         stale_branches = _sync_from_remote_microbeads(worktree, session_id)
 
+    # Check for changes
+    result = run_git("status", "--porcelain", cwd=worktree)
+    if not result.stdout.strip():
+        return  # No local changes to push
+
+    # Stage all changes
+    run_git("add", ".", cwd=worktree)
+
+    # Commit
+    commit_msg = message or "Update issues"
+    run_git("commit", "-m", commit_msg, cwd=worktree)
+
     # Push (try to push, don't fail if remote doesn't exist or permission denied)
-    result = run_git("push", "-u", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree, check=False)
+    result = run_git(
+        "push", "-u", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree, check=False
+    )
     push_succeeded = False
     if result.returncode != 0:
         # Check if it's because remote doesn't exist or permission issue
@@ -301,7 +300,9 @@ def sync(repo_root: Path, message: str | None = None) -> None:
             pass  # No remote configured, that's OK
         elif "has no upstream branch" in result.stderr:
             # First push, set upstream
-            run_git("push", "--set-upstream", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree)
+            run_git(
+                "push", "--set-upstream", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree
+            )
             push_succeeded = True
         elif "403" in result.stderr or "Permission denied" in result.stderr:
             pass  # Permission issue, skip push silently

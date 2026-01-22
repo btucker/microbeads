@@ -309,7 +309,11 @@ def get_open_blockers(
     blockers = []
     for dep_id in issue.get("dependencies", []):
         dep = cache.get(dep_id)
-        if dep and dep.get("status") in (Status.OPEN.value, Status.IN_PROGRESS.value, Status.BLOCKED.value):
+        if dep and dep.get("status") in (
+            Status.OPEN.value,
+            Status.IN_PROGRESS.value,
+            Status.BLOCKED.value,
+        ):
             blockers.append(dep)
     return blockers
 
@@ -354,7 +358,9 @@ def get_blocked_issues(worktree: Path) -> list[dict[str, Any]]:
     return blocked
 
 
-def build_dependency_tree(worktree: Path, issue_id: str, visited: set[str] | None = None) -> dict[str, Any]:
+def build_dependency_tree(
+    worktree: Path, issue_id: str, visited: set[str] | None = None
+) -> dict[str, Any]:
     """Build a dependency tree for an issue."""
     if visited is None:
         visited = set()

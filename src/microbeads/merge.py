@@ -45,7 +45,6 @@ def merge_issues(base: dict, ours: dict, theirs: dict) -> dict[str, Any]:
 
     # Newer version wins for scalar fields
     newer = ours if ours_updated >= theirs_updated else theirs
-    older = theirs if ours_updated >= theirs_updated else ours
 
     result = {}
 
