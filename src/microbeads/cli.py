@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -231,6 +232,66 @@ def import_from_beads(worktree, json_output: bool = False) -> int:
     return imported
 
 
+def update_agents_md(repo_root: Path, json_output: bool = False) -> bool:
+    """Update AGENTS.md with microbeads section.
+
+    - Removes any existing beads section
+    - Adds microbeads section if not present
+    - Returns True if file was modified
+    """
+    agents_path = repo_root / "AGENTS.md"
+
+    if agents_path.exists():
+        content = agents_path.read_text()
+    else:
+        content = "# Agent Instructions\n\n"
+
+    modified = False
+
+    # Check if microbeads section already exists
+    if "## Microbeads" in content:
+        if not json_output:
+            click.echo("AGENTS.md: microbeads section already present")
+        return False
+
+    # Remove beads section if present (matches ## Beads or ## Issue Tracking with bd commands)
+    # Pattern matches section starting with ## that contains "bd " commands until next ## or end
+    beads_patterns = [
+        # Match "## Beads" or "## Beads Issue Tracking" section
+        r'## Beads[^\n]*\n(?:(?!## ).)*',
+        # Match any section containing "bd " commands (reference beads CLI)
+        r'## [^\n]*\n(?:(?!## )(?:.*\bbd\s+\w+.*\n|[^\n]*\n))*(?=## |\Z)',
+    ]
+
+    for pattern in beads_patterns:
+        if re.search(pattern, content, re.MULTILINE | re.DOTALL):
+            # Only remove if it contains bd commands
+            match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+            if match and 'bd ' in match.group(0):
+                content = re.sub(pattern, '', content, flags=re.MULTILINE | re.DOTALL)
+                modified = True
+                if not json_output:
+                    click.echo("AGENTS.md: removed beads section")
+
+    # Clean up multiple blank lines
+    content = re.sub(r'\n{3,}', '\n\n', content)
+
+    # Append microbeads section (reuse PRIME_TEMPLATE)
+    cmd = get_command_name()
+    section = PRIME_TEMPLATE.format(cmd=cmd)
+
+    if not content.endswith('\n'):
+        content += '\n'
+    content += section
+    modified = True
+
+    agents_path.write_text(content)
+    if not json_output:
+        click.echo("AGENTS.md: added microbeads section")
+
+    return modified
+
+
 @main.command()
 @click.option("--import-beads", is_flag=True, help="Import issues from existing beads installation")
 @pass_context
@@ -241,6 +302,9 @@ def init(ctx: Context, import_beads: bool):
     imported = 0
     if import_beads:
         imported = import_from_beads(worktree, ctx.json_output)
+
+    # Update AGENTS.md
+    update_agents_md(ctx.repo_root, ctx.json_output)
 
     output(
         ctx,
