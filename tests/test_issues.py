@@ -19,6 +19,7 @@ from microbeads.issues import (
     get_ready_issues,
     issue_to_json,
     list_issues,
+    load_active_issues,
     load_all_issues,
     load_issue,
     now_iso,
@@ -385,22 +386,23 @@ class TestDependencies:
         save_issue(mock_worktree, parent)
         save_issue(mock_worktree, child)
 
-        cache = load_all_issues(mock_worktree)
-        blockers = get_open_blockers(cache[child["id"]], cache)
+        cache = load_active_issues(mock_worktree)
+        blockers = get_open_blockers(cache[child["id"]], cache, mock_worktree)
         assert len(blockers) == 1
         assert blockers[0]["id"] == parent["id"]
 
     def test_get_open_blockers_closed_parent(self, mock_worktree: Path):
         """Test that closed issues don't block."""
         parent = create_issue("Parent", mock_worktree)
-        parent["status"] = Status.CLOSED.value
         child = create_issue("Child", mock_worktree)
         child["dependencies"] = [parent["id"]]
+        # Save parent first, then close it (which moves it to closed dir)
         save_issue(mock_worktree, parent)
         save_issue(mock_worktree, child)
+        close_issue(mock_worktree, parent["id"])
 
-        cache = load_all_issues(mock_worktree)
-        blockers = get_open_blockers(cache[child["id"]], cache)
+        cache = load_active_issues(mock_worktree)
+        blockers = get_open_blockers(cache[child["id"]], cache, mock_worktree)
         assert len(blockers) == 0
 
 

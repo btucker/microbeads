@@ -70,6 +70,10 @@ def mock_worktree(tmp_path: Path) -> Path:
     issues_dir = beads_dir / "issues"
     issues_dir.mkdir()
 
+    # Create active and closed subdirectories
+    (issues_dir / "active").mkdir()
+    (issues_dir / "closed").mkdir()
+
     # Create metadata file
     metadata = {"version": "0.1.0", "id_prefix": "test"}
     (beads_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
