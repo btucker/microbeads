@@ -37,7 +37,7 @@ This creates:
 
 ### 2. Import from existing beads (optional)
 
-If you have the reference beads implementation (`bd`) installed with existing issues:
+If you have [beads](https://github.com/steveyegge/beads) (`bd`) installed with existing issues:
 
 ```bash
 mb init --import-beads
@@ -136,7 +136,7 @@ mb --json ready
 
 ## How It Works
 
-Unlike the reference beads implementation (SQLite + JSONL), microbeads stores each issue as a separate JSON file:
+Unlike beads (SQLite + JSONL), microbeads stores each issue as a separate JSON file:
 
 ```
 .git/microbeads-worktree/
@@ -259,9 +259,9 @@ See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
 - JSON output mode
 - Landing the plane (session completion checklist)
 
-## Differences from Reference Beads
+## Differences from Beads
 
-| Feature | Reference Beads | Microbeads |
+| Feature | Beads | Microbeads |
 |---------|----------------|------------|
 | Storage | SQLite + JSONL | JSON files |
 | Sync | Daemon + auto-export | Manual `sync` |
@@ -279,7 +279,7 @@ Microbeads focuses on the essentials for AI agent issue tracking, without the co
 
 ## Performance
 
-Microbeads is optimized for fast issue operations, though as a Python CLI it has inherent startup overhead compared to compiled Go binaries like the reference `bd` implementation.
+Microbeads is optimized for fast issue operations, though as a Python CLI it has inherent startup overhead compared to compiled Go binaries like `bd`.
 
 ### Optimizations
 
@@ -288,7 +288,7 @@ Microbeads is optimized for fast issue operations, though as a Python CLI it has
 - **Lazy imports** - Deferred module loading reduces startup by ~25ms
 - **Status-based loading** - Only loads closed issues when explicitly requested
 
-### Benchmark Results (vs reference `bd`)
+### Benchmark Results (vs `bd`)
 
 | Operation | mb | bd | Ratio |
 |-----------|-----|-----|-------|
