@@ -577,12 +577,22 @@ def prime():
 
     Designed for Claude Code hooks (SessionStart, PreCompact) to remind
     agents of the microbeads workflow after context compaction.
+
+    Auto-initializes microbeads if not already initialized, and syncs
+    to pull any remote changes.
     """
-    # Check if we're in a microbeads project
+    # Check if we're in a git repo
     repo_root = repo.find_repo_root()
-    if repo_root is None or not repo.is_initialized(repo_root):
-        # Silent exit - not in a microbeads project
+    if repo_root is None:
+        # Silent exit - not in a git repo
         sys.exit(0)
+
+    # Auto-init if not initialized
+    if not repo.is_initialized(repo_root):
+        repo.init(repo_root)
+
+    # Sync to pull any remote changes
+    repo.sync(repo_root)
 
     # Check for custom PRIME.md override
     custom_prime = repo_root / ".microbeads" / "PRIME.md"
@@ -605,8 +615,10 @@ def setup():
 def setup_claude(global_: bool, remove: bool):
     """Install Claude Code hooks for microbeads.
 
-    Adds SessionStart and PreCompact hooks that run 'mb prime' to remind
-    the AI agent of the microbeads workflow.
+    Adds SessionStart and PreCompact hooks that run 'mb prime' which:
+    - Auto-initializes microbeads if not already set up
+    - Syncs to pull any remote changes
+    - Outputs workflow context for the AI agent
 
     By default, installs for the current project (.claude/settings.json).
     Use --global to install for all projects (~/.claude/settings.json).
