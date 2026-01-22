@@ -9,7 +9,7 @@ from typing import Any
 
 import click
 
-from . import issues, merge, repo
+from . import get_command_name, issues, merge, repo
 
 # Condensed workflow instructions for Claude Code hooks
 PRIME_TEMPLATE = """# Microbeads Issue Tracking
@@ -38,17 +38,6 @@ Run `{cmd} ready` to check for existing issues first.
 ## Priority: P0 (critical) to P4 (low)
 ## Types: bug | feature | task | epic | chore
 """
-
-
-def get_command_name() -> str:
-    """Get the command name based on how we were invoked."""
-    # Check argv[0] to see how we were called
-    if sys.argv and sys.argv[0]:
-        prog = Path(sys.argv[0]).name
-        if prog == "mb":
-            return "mb"
-    # Default to uvx microbeads for portability
-    return "uvx microbeads"
 
 
 class Context:
@@ -660,9 +649,9 @@ def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -
     # Get or create hooks section
     hooks = settings.setdefault("hooks", {})
 
-    # Add uvx microbeads prime to SessionStart and PreCompact
-    # Using uvx ensures it works without global installation
-    command = "uvx microbeads prime"
+    # Add microbeads prime to SessionStart and PreCompact
+    # Use get_command_name() to detect if mb is available
+    command = f"{get_command_name()} prime"
     hook_entry = {"matcher": "", "hooks": [{"type": "command", "command": command}]}
 
     for event in ["SessionStart", "PreCompact"]:

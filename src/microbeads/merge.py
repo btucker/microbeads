@@ -10,6 +10,7 @@ def merge_json_files(base_path: str, ours_path: str, theirs_path: str) -> int:
     """Merge two JSON files with a common base.
 
     Implements a 3-way merge with these strategies:
+    - For metadata.json: prefer theirs (remote) version
     - Scalars: Last-Write-Wins based on updated_at
     - Arrays (labels, dependencies): Union merge
     - Timestamps: Take the later one
@@ -22,15 +23,31 @@ def merge_json_files(base_path: str, ours_path: str, theirs_path: str) -> int:
     Returns:
         0 on success, 1 on conflict that couldn't be resolved
     """
+
+    def read_json(path: str) -> dict:
+        p = Path(path)
+        if not p.exists():
+            return {}
+        content = p.read_text().strip()
+        if not content:
+            return {}
+        return json.loads(content)
+
     try:
-        base = json.loads(Path(base_path).read_text()) if Path(base_path).exists() else {}
-        ours = json.loads(Path(ours_path).read_text())
-        theirs = json.loads(Path(theirs_path).read_text())
+        base = read_json(base_path)
+        ours = read_json(ours_path)
+        theirs = read_json(theirs_path)
     except (json.JSONDecodeError, OSError) as e:
         print(f"Error reading files: {e}", file=sys.stderr)
         return 1
 
-    merged = merge_issues(base, ours, theirs)
+    # For metadata.json (identified by having 'version' but no 'id'), prefer theirs
+    is_metadata = "version" in (ours or theirs) and "id" not in (ours or theirs)
+    if is_metadata:
+        # Always prefer remote (theirs) for metadata to avoid conflicts
+        merged = theirs if theirs else ours
+    else:
+        merged = merge_issues(base, ours, theirs)
 
     # Write result back to ours_path (git expects this)
     Path(ours_path).write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n")

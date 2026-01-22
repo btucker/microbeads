@@ -3,6 +3,8 @@
 import subprocess
 from pathlib import Path
 
+from . import get_command_name
+
 BRANCH_NAME = "microbeads"
 WORKTREE_DIR = ".git/microbeads-worktree"
 BEADS_DIR = ".microbeads"
@@ -175,14 +177,19 @@ def init(repo_root: Path) -> Path:
 
 def configure_merge_driver(repo_root: Path) -> None:
     """Configure the JSON merge driver in git config."""
-    # Check if already configured
+    cmd = get_command_name()
+
+    # Check if already configured with correct command
     result = run_git("config", "--get", "merge.microbeads-json.driver", cwd=repo_root, check=False)
     if result.returncode == 0:
-        return
+        current_driver = result.stdout.strip()
+        # Update if using old 'bd' command or if command changed
+        if not current_driver.startswith("bd ") and cmd in current_driver:
+            return
 
     # Configure the merge driver
     run_git("config", "merge.microbeads-json.name", "Microbeads JSON merge driver", cwd=repo_root)
-    run_git("config", "merge.microbeads-json.driver", "bd merge-driver %O %A %B", cwd=repo_root)
+    run_git("config", "merge.microbeads-json.driver", f"{cmd} merge-driver %O %A %B", cwd=repo_root)
 
 
 def ensure_worktree(repo_root: Path) -> Path:
@@ -235,13 +242,24 @@ def _sync_from_remote_microbeads(worktree: Path, current_session_id: str) -> lis
     for branch in remote_branches:
         if branch == our_branch:
             continue  # Skip our own session branch
-        if branch == BRANCH_NAME:
-            continue  # Don't delete canonical branch
 
         # Try to merge (allow conflicts to be auto-resolved by merge driver)
-        result = run_git("pull", "--no-edit", "origin", branch, cwd=worktree, check=False)
+        # Use --no-rebase to ensure merge behavior for divergent branches
+        # Use --allow-unrelated-histories since orphan branches may not share history
+        result = run_git(
+            "pull",
+            "--no-rebase",
+            "--no-edit",
+            "--allow-unrelated-histories",
+            "origin",
+            branch,
+            cwd=worktree,
+            check=False,
+        )
         if result.returncode == 0:
-            merged_branches.append(branch)
+            # Only mark session branches for cleanup, not the canonical branch
+            if branch != BRANCH_NAME:
+                merged_branches.append(branch)
         elif "CONFLICT" not in result.stdout:
             run_git("merge", "--abort", cwd=worktree, check=False)
 
@@ -273,9 +291,8 @@ def sync(repo_root: Path, message: str | None = None) -> None:
 
     # Fetch and merge any existing microbeads branches to stay in sync
     # Do this BEFORE checking for local changes, so we always pull remote state
-    stale_branches = []
-    if session_id:
-        stale_branches = _sync_from_remote_microbeads(worktree, session_id)
+    # Always sync, even when not in a Claude session (pass empty string as session_id)
+    stale_branches = _sync_from_remote_microbeads(worktree, session_id or "")
 
     # Check for changes
     result = run_git("status", "--porcelain", cwd=worktree)

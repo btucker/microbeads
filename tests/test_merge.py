@@ -196,3 +196,65 @@ class TestMergeJsonFiles:
 
         result = merge_json_files(str(base_path), str(ours_path), str(theirs_path))
         assert result == 1
+
+    def test_merge_json_files_empty_base(self, tmp_path: Path):
+        """Test merging when base file is empty (unrelated histories)."""
+        base_path = tmp_path / "base.json"
+        ours_path = tmp_path / "ours.json"
+        theirs_path = tmp_path / "theirs.json"
+
+        # Empty base file simulates unrelated histories
+        base_path.write_text("")
+        ours_path.write_text(
+            json.dumps(
+                {
+                    "id": "test-1",
+                    "title": "Ours",
+                    "status": "open",
+                    "updated_at": "2024-01-01T00:00:00Z",
+                    "labels": [],
+                    "dependencies": [],
+                }
+            )
+        )
+        theirs_path.write_text(
+            json.dumps(
+                {
+                    "id": "test-1",
+                    "title": "Theirs",
+                    "status": "open",
+                    "updated_at": "2024-01-02T00:00:00Z",
+                    "labels": [],
+                    "dependencies": [],
+                }
+            )
+        )
+
+        result = merge_json_files(str(base_path), str(ours_path), str(theirs_path))
+        assert result == 0
+
+        merged = json.loads(ours_path.read_text())
+        # Theirs is newer, so should win
+        assert merged["title"] == "Theirs"
+
+    def test_merge_json_files_metadata_prefers_theirs(self, tmp_path: Path):
+        """Test that metadata.json always prefers theirs (remote)."""
+        base_path = tmp_path / "base.json"
+        ours_path = tmp_path / "ours.json"
+        theirs_path = tmp_path / "theirs.json"
+
+        # Metadata files have 'version' but no 'id'
+        ours_data = {"version": "0.1.0", "id_prefix": "ours"}
+        theirs_data = {"version": "0.2.0", "id_prefix": "theirs"}
+
+        base_path.write_text("")
+        ours_path.write_text(json.dumps(ours_data))
+        theirs_path.write_text(json.dumps(theirs_data))
+
+        result = merge_json_files(str(base_path), str(ours_path), str(theirs_path))
+        assert result == 0
+
+        merged = json.loads(ours_path.read_text())
+        # Should prefer theirs for metadata
+        assert merged["id_prefix"] == "theirs"
+        assert merged["version"] == "0.2.0"

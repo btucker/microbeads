@@ -1,9 +1,11 @@
 """Tests for repository management functionality."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from microbeads import get_command_name
 from microbeads.repo import (
     BEADS_DIR,
     ISSUES_DIR,
@@ -162,3 +164,25 @@ class TestIsInitialized:
         beads_dir.mkdir()
 
         assert is_initialized(temp_git_repo)
+
+
+class TestGetCommandName:
+    """Tests for get_command_name utility."""
+
+    def test_returns_mb_when_invoked_as_mb(self):
+        """Test that mb is returned when invoked as mb."""
+        with patch("microbeads.sys.argv", ["/usr/bin/mb", "list"]):
+            with patch("microbeads.shutil.which", return_value=None):
+                assert get_command_name() == "mb"
+
+    def test_returns_mb_when_in_path(self):
+        """Test that mb is returned when available in PATH."""
+        with patch("microbeads.sys.argv", ["/some/other/script", "list"]):
+            with patch("microbeads.shutil.which", return_value="/usr/local/bin/mb"):
+                assert get_command_name() == "mb"
+
+    def test_returns_uvx_when_mb_not_available(self):
+        """Test fallback to uvx microbeads when mb not available."""
+        with patch("microbeads.sys.argv", ["/some/script", "list"]):
+            with patch("microbeads.shutil.which", return_value=None):
+                assert get_command_name() == "uvx microbeads"
