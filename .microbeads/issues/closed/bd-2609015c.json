@@ -1,0 +1,17 @@
+{
+  "acceptance_criteria": "Must pass tests",
+  "closed_at": "2026-01-22T11:22:36Z",
+  "closed_reason": "Test completed",
+  "created_at": "2026-01-22T11:22:17Z",
+  "dependencies": [],
+  "description": "",
+  "design": "Use Python and Click",
+  "id": "bd-2609015c",
+  "labels": [],
+  "notes": "This is a test",
+  "priority": 3,
+  "status": "closed",
+  "title": "Test issue with extra fields",
+  "type": "task",
+  "updated_at": "2026-01-22T11:22:36Z"
+}

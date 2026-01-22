@@ -1,0 +1,10 @@
+{
+  "closed_at": "2026-01-22T05:16:55Z",
+  "closed_reason": "Working with session ID fallback",
+  "compacted": true,
+  "id": "bd-b3cf",
+  "priority": 3,
+  "status": "closed",
+  "title": "Test fallback push to claude/microbeads",
+  "type": "task"
+}

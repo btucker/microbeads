@@ -1,0 +1,13 @@
+{
+  "closed_at": "2026-01-22T07:10:38Z",
+  "closed_reason": "Added E2E tests for dependency management",
+  "compacted": true,
+  "dependency_count": 1,
+  "id": "bd-243b",
+  "label_count": 1,
+  "priority": 1,
+  "status": "closed",
+  "summary": "Test dep add/rm/tree, ready/blocked filtering. Verify closing parent unblocks child. Test circular d",
+  "title": "E2E test: dependency management",
+  "type": "task"
+}
