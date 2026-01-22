@@ -215,15 +215,25 @@ def sync(repo_root: Path, message: str | None = None) -> None:
     commit_msg = message or "Update issues"
     run_git("commit", "-m", commit_msg, cwd=worktree)
 
+    # Determine push target - detect Claude Code web environment
+    push_target = BRANCH_NAME
+    current = run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=repo_root, check=False)
+    if current.returncode == 0:
+        branch = current.stdout.strip()
+        # If on a claude/* branch, use session-compatible naming
+        if branch.startswith("claude/") and "-" in branch:
+            session_id = branch.rsplit("-", 1)[-1]
+            push_target = f"claude/{BRANCH_NAME}-{session_id}"
+
     # Push (try to push, don't fail if remote doesn't exist or permission denied)
-    result = run_git("push", "-u", "origin", BRANCH_NAME, cwd=worktree, check=False)
+    result = run_git("push", "-u", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree, check=False)
     if result.returncode != 0:
         # Check if it's because remote doesn't exist or permission issue
         if "does not appear to be a git repository" in result.stderr:
             pass  # No remote configured, that's OK
         elif "has no upstream branch" in result.stderr:
             # First push, set upstream
-            run_git("push", "--set-upstream", "origin", BRANCH_NAME, cwd=worktree)
+            run_git("push", "--set-upstream", "origin", f"{BRANCH_NAME}:{push_target}", cwd=worktree)
         elif "403" in result.stderr or "Permission denied" in result.stderr:
             pass  # Permission issue, skip push silently
         else:
