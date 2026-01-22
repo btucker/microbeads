@@ -19,6 +19,17 @@ mb sync                                     # Commit and push to orphan branch
 
 **Always use `--json` for programmatic access:** `mb --json list`
 
+## Test-Driven Development (TDD)
+
+**Always follow TDD when implementing features or fixing bugs:**
+
+1. **Write tests first** - Before writing implementation code, write failing tests that define the expected behavior
+2. **Run tests to see them fail** - Verify the tests fail for the right reason
+3. **Write minimal code** - Implement just enough to make tests pass
+4. **Refactor** - Clean up while keeping tests green
+
+This ensures code is testable by design and provides confidence that changes work correctly.
+
 ## Session Workflow
 
 ```bash
