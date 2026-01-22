@@ -23,6 +23,7 @@ def perf_worktree(tmp_path: Path) -> Path:
     return worktree
 
 
+@pytest.mark.slow
 class TestScalabilityWith10000Issues:
     """Test that microbeads performs well with 10,000+ issues."""
 
@@ -231,6 +232,7 @@ class TestScalabilityWith10000Issues:
         )
 
 
+@pytest.mark.slow
 class TestDependencyScalability:
     """Test dependency operations scale with many issues and complex dependency graphs."""
 
@@ -362,6 +364,7 @@ class TestDependencyScalability:
         print(f"\nAdded {deps_added} dependencies in {elapsed:.2f}s")
 
 
+@pytest.mark.slow
 class TestMemoryEfficiency:
     """Test memory usage doesn't explode with many issues."""
 
@@ -389,6 +392,7 @@ class TestMemoryEfficiency:
         # This test passes if no exception is raised
 
 
+@pytest.mark.slow
 class TestBenchmarkVsBd:
     """Benchmark microbeads against bd (beads) CLI for comparison.
 

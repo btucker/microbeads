@@ -59,9 +59,3 @@ mb sync
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-
-## Visual Design
-
-Use small Unicode symbols for status: `○` open, `◐` in_progress, `●` closed
-
-Priority format: `P0` (critical) through `P4` (low)

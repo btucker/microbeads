@@ -92,12 +92,12 @@ def output(ctx: Context, data: Any, human_format: str | None = None) -> None:
 def format_issue_line(issue: dict[str, Any]) -> str:
     """Format an issue as a single line for list output."""
     status_icons = {
-        "open": " ",
-        "in_progress": "▶",
+        "open": "○",
+        "in_progress": "◐",
         "blocked": "⊗",
-        "closed": "✓",
+        "closed": "●",
     }
-    icon = status_icons.get(issue.get("status", "open"), " ")
+    icon = status_icons.get(issue.get("status", "open"), "○")
     priority = issue.get("priority", 2)
     labels = ",".join(issue.get("labels", []))
     labels_str = f" [{labels}]" if labels else ""
