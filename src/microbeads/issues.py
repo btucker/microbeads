@@ -322,6 +322,26 @@ def list_issues(
     return issues
 
 
+def _add_history_entry(
+    issue: dict[str, Any],
+    field: str,
+    old_value: Any,
+    new_value: Any,
+    timestamp: str | None = None,
+) -> None:
+    """Add a history entry to an issue."""
+    if "history" not in issue:
+        issue["history"] = []
+
+    entry = {
+        "field": field,
+        "old": old_value,
+        "new": new_value,
+        "at": timestamp or now_iso(),
+    }
+    issue["history"].append(entry)
+
+
 def update_issue(
     worktree: Path,
     issue_id: str,
@@ -345,30 +365,48 @@ def update_issue(
     if issue is None:
         raise ValueError(f"Issue not found: {issue_id}")
 
-    if status is not None:
+    timestamp = now_iso()
+
+    if status is not None and issue.get("status") != status.value:
+        _add_history_entry(issue, "status", issue.get("status"), status.value, timestamp)
         issue["status"] = status.value
-    if priority is not None:
+    if priority is not None and issue.get("priority") != priority:
+        _add_history_entry(issue, "priority", issue.get("priority"), priority, timestamp)
         issue["priority"] = priority
-    if title is not None:
+    if title is not None and issue.get("title") != title:
+        _add_history_entry(issue, "title", issue.get("title"), title, timestamp)
         issue["title"] = title
-    if description is not None:
+    if description is not None and issue.get("description") != description:
+        _add_history_entry(issue, "description", "(changed)", "(changed)", timestamp)
         issue["description"] = description
     if labels is not None:
+        old_labels = issue.get("labels", [])
+        if sorted(old_labels) != sorted(labels):
+            _add_history_entry(issue, "labels", old_labels, labels, timestamp)
         issue["labels"] = labels
     if add_labels:
         current = set(issue.get("labels", []))
-        issue["labels"] = sorted(current | set(add_labels))
+        new_labels = sorted(current | set(add_labels))
+        if new_labels != sorted(current):
+            _add_history_entry(issue, "labels", sorted(current), new_labels, timestamp)
+        issue["labels"] = new_labels
     if remove_labels:
         current = set(issue.get("labels", []))
-        issue["labels"] = sorted(current - set(remove_labels))
-    if design is not None:
+        new_labels = sorted(current - set(remove_labels))
+        if new_labels != sorted(current):
+            _add_history_entry(issue, "labels", sorted(current), new_labels, timestamp)
+        issue["labels"] = new_labels
+    if design is not None and issue.get("design") != design:
+        _add_history_entry(issue, "design", "(changed)", "(changed)", timestamp)
         issue["design"] = design
-    if notes is not None:
+    if notes is not None and issue.get("notes") != notes:
+        _add_history_entry(issue, "notes", "(changed)", "(changed)", timestamp)
         issue["notes"] = notes
-    if acceptance_criteria is not None:
+    if acceptance_criteria is not None and issue.get("acceptance_criteria") != acceptance_criteria:
+        _add_history_entry(issue, "acceptance_criteria", "(changed)", "(changed)", timestamp)
         issue["acceptance_criteria"] = acceptance_criteria
 
-    issue["updated_at"] = now_iso()
+    issue["updated_at"] = timestamp
     save_issue(worktree, issue)
 
     return issue
@@ -390,10 +428,13 @@ def close_issue(worktree: Path, issue_id: str, reason: str = "") -> dict[str, An
         active_path.unlink()
         _remove_from_active_cache(worktree, full_id)
 
+    timestamp = now_iso()
+    _add_history_entry(issue, "status", issue.get("status"), Status.CLOSED.value, timestamp)
+
     issue["status"] = Status.CLOSED.value
-    issue["closed_at"] = now_iso()
+    issue["closed_at"] = timestamp
     issue["closed_reason"] = reason
-    issue["updated_at"] = now_iso()
+    issue["updated_at"] = timestamp
 
     # save_issue will save to closed directory since status is closed
     save_issue(worktree, issue)
@@ -416,10 +457,13 @@ def reopen_issue(worktree: Path, issue_id: str) -> dict[str, Any]:
         closed_path.unlink()
         _remove_from_closed_cache(worktree, full_id)
 
+    timestamp = now_iso()
+    _add_history_entry(issue, "status", issue.get("status"), Status.OPEN.value, timestamp)
+
     issue["status"] = Status.OPEN.value
     issue["closed_at"] = None
     issue["closed_reason"] = None
-    issue["updated_at"] = now_iso()
+    issue["updated_at"] = timestamp
 
     # save_issue will save to active directory since status is open
     save_issue(worktree, issue)

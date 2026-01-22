@@ -134,6 +134,19 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
     if issue.get("compacted"):
         lines.append("(compacted)")
 
+    # Show history if present
+    history = issue.get("history", [])
+    if history:
+        lines.append("\nHistory:")
+        for entry in history[-10:]:  # Show last 10 entries
+            field = entry.get("field", "?")
+            old_val = entry.get("old", "?")
+            new_val = entry.get("new", "?")
+            at = entry.get("at", "?")
+            lines.append(f"  {at}: {field}: {old_val} -> {new_val}")
+        if len(history) > 10:
+            lines.append(f"  ... and {len(history) - 10} more entries")
+
     return "\n".join(lines)
 
 
