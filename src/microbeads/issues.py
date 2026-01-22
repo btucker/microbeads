@@ -118,6 +118,9 @@ def create_issue(
     issue_type: IssueType = IssueType.TASK,
     priority: int = 2,
     labels: list[str] | None = None,
+    design: str = "",
+    notes: str = "",
+    acceptance_criteria: str = "",
 ) -> dict[str, Any]:
     """Create a new issue dictionary."""
     now = now_iso()
@@ -125,13 +128,16 @@ def create_issue(
     issue_id = generate_id(title, prefix)
 
     return {
+        "acceptance_criteria": acceptance_criteria,
         "closed_at": None,
         "closed_reason": None,
         "created_at": now,
         "dependencies": [],
         "description": description,
+        "design": design,
         "id": issue_id,
         "labels": labels or [],
+        "notes": notes,
         "priority": priority,
         "status": Status.OPEN.value,
         "title": title,
@@ -326,6 +332,9 @@ def update_issue(
     labels: list[str] | None = None,
     add_labels: list[str] | None = None,
     remove_labels: list[str] | None = None,
+    design: str | None = None,
+    notes: str | None = None,
+    acceptance_criteria: str | None = None,
 ) -> dict[str, Any]:
     """Update an issue's fields."""
     full_id = resolve_issue_id(worktree, issue_id)
@@ -352,6 +361,12 @@ def update_issue(
     if remove_labels:
         current = set(issue.get("labels", []))
         issue["labels"] = sorted(current - set(remove_labels))
+    if design is not None:
+        issue["design"] = design
+    if notes is not None:
+        issue["notes"] = notes
+    if acceptance_criteria is not None:
+        issue["acceptance_criteria"] = acceptance_criteria
 
     issue["updated_at"] = now_iso()
     save_issue(worktree, issue)
@@ -759,3 +774,92 @@ def migrate_flat_to_status_dirs(worktree: Path) -> int:
     clear_cache(worktree)
 
     return migrated
+
+
+def compact_issue(issue: dict[str, Any]) -> dict[str, Any]:
+    """Create a compacted version of an issue for memory efficiency.
+
+    Keeps essential fields and removes verbose data like full description.
+    Only compacts closed issues.
+    """
+    if issue.get("status") != Status.CLOSED.value:
+        return issue
+
+    # Extract first line of description as summary
+    description = issue.get("description", "")
+    summary = description.split("\n")[0][:100] if description else ""
+
+    compacted = {
+        "id": issue["id"],
+        "title": issue["title"],
+        "status": Status.CLOSED.value,
+        "type": issue.get("type", IssueType.TASK.value),
+        "priority": issue.get("priority", 2),
+        "closed_at": issue.get("closed_at"),
+        "closed_reason": issue.get("closed_reason", ""),
+        "compacted": True,
+    }
+
+    # Keep summary if description was present
+    if summary:
+        compacted["summary"] = summary
+
+    # Keep dependency count for reference
+    deps = issue.get("dependencies", [])
+    if deps:
+        compacted["dependency_count"] = len(deps)
+
+    # Keep label count
+    labels = issue.get("labels", [])
+    if labels:
+        compacted["label_count"] = len(labels)
+
+    return compacted
+
+
+def compact_closed_issues(
+    worktree: Path,
+    older_than_days: int = 7,
+) -> dict[str, Any]:
+    """Compact closed issues older than specified days.
+
+    Returns dict with 'compacted' list and 'skipped' count.
+    """
+    from datetime import datetime, timedelta
+
+    all_issues = load_all_issues(worktree)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+
+    compacted_list: list[dict[str, Any]] = []
+    skipped = 0
+
+    for issue_id, issue in all_issues.items():
+        # Skip non-closed issues
+        if issue.get("status") != Status.CLOSED.value:
+            continue
+
+        # Skip already compacted
+        if issue.get("compacted"):
+            skipped += 1
+            continue
+
+        # Check if closed_at is old enough
+        closed_at = issue.get("closed_at")
+        if closed_at:
+            try:
+                closed_dt = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+                if closed_dt > cutoff:
+                    skipped += 1
+                    continue
+            except (ValueError, TypeError):
+                pass  # If we can't parse, compact it
+
+        # Compact the issue
+        compacted = compact_issue(issue)
+        save_issue(worktree, compacted)
+        compacted_list.append({"id": issue_id, "title": issue["title"]})
+
+    return {
+        "compacted": compacted_list,
+        "skipped": skipped,
+    }

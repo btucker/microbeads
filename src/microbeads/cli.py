@@ -328,9 +328,20 @@ def init(ctx: Context, import_beads: bool):
     "-p", "--priority", default=2, type=click.IntRange(0, 4), help="Priority (0=critical, 4=low)"
 )
 @click.option("-l", "--label", multiple=True, help="Labels (can specify multiple)")
+@click.option("--design", default="", help="Design notes or approach")
+@click.option("--notes", default="", help="General notes")
+@click.option("--acceptance-criteria", "acceptance_criteria", default="", help="Acceptance criteria / definition of done")
 @pass_context
 def create(
-    ctx: Context, title: str, description: str, issue_type: str, priority: int, label: tuple
+    ctx: Context,
+    title: str,
+    description: str,
+    issue_type: str,
+    priority: int,
+    label: tuple,
+    design: str,
+    notes: str,
+    acceptance_criteria: str,
 ):
     """Create a new issue."""
     issue = issues.create_issue(
@@ -340,6 +351,9 @@ def create(
         issue_type=issues.IssueType(issue_type),
         priority=priority,
         labels=list(label) if label else None,
+        design=design,
+        notes=notes,
+        acceptance_criteria=acceptance_criteria,
     )
     issues.save_issue(ctx.worktree, issue)
     output(ctx, issue, f"Created {issue['id']}: {title}")
@@ -417,6 +431,9 @@ def show(ctx: Context, issue_id: str):
 @click.option("-l", "--label", multiple=True, help="Set labels (replaces existing)")
 @click.option("--add-label", multiple=True, help="Add labels")
 @click.option("--remove-label", multiple=True, help="Remove labels")
+@click.option("--design", help="Update design notes")
+@click.option("--notes", help="Update notes")
+@click.option("--acceptance-criteria", "acceptance_criteria", help="Update acceptance criteria")
 @pass_context
 def update(
     ctx: Context,
@@ -428,6 +445,9 @@ def update(
     label: tuple,
     add_label: tuple,
     remove_label: tuple,
+    design: str | None,
+    notes: str | None,
+    acceptance_criteria: str | None,
 ):
     """Update an issue."""
     try:
@@ -442,6 +462,9 @@ def update(
             labels=list(label) if label else None,
             add_labels=list(add_label) if add_label else None,
             remove_labels=list(remove_label) if remove_label else None,
+            design=design,
+            notes=notes,
+            acceptance_criteria=acceptance_criteria,
         )
         output(ctx, issue, f"Updated {issue['id']}")
     except ValueError as e:
@@ -561,6 +584,43 @@ def sync(ctx: Context, message: str | None):
     # Clear cache after sync since git may have updated files
     issues.clear_cache(ctx.worktree)
     output(ctx, {"status": "synced"}, "Changes synced.")
+
+
+@main.command()
+@click.option(
+    "--days",
+    default=7,
+    type=int,
+    help="Only compact issues closed more than N days ago (default: 7)",
+)
+@pass_context
+def compact(ctx: Context, days: int):
+    """Compact closed issues to reduce memory usage.
+
+    Removes verbose fields (description, dependencies, labels) from closed
+    issues older than the specified number of days, keeping only essential
+    information like ID, title, status, and close reason.
+
+    This helps AI agents manage context window limits during long sessions.
+    """
+    result = issues.compact_closed_issues(ctx.worktree, older_than_days=days)
+
+    if ctx.json_output:
+        output(ctx, result)
+        return
+
+    compacted = result["compacted"]
+    skipped = result["skipped"]
+
+    if compacted:
+        click.echo(f"Compacted {len(compacted)} issues:")
+        for item in compacted:
+            click.echo(f"  ● {item['id']}: {item['title']}")
+    else:
+        click.echo("No issues to compact.")
+
+    if skipped:
+        click.echo(f"Skipped {skipped} issues (already compacted or too recent).")
 
 
 @main.command()
