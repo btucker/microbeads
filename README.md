@@ -1,6 +1,6 @@
 # Microbeads
 
-A simplified git-backed issue tracker for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch. A custom merge strategy ensures you never need to deal with conflicts. Unlike beads, microbeads fully supports Claude Code Web sessions with automatic branch routing.
+A simplified git-backed issue tracker for AI agents. Issues are stored as individual JSON files on a dedicated orphan branch. No SQLite, no daemon, no issues with multiple worktrees. A custom merge strategy ensures you never need to deal with conflicts. Unlike beads, microbeads fully supports Claude Code Web sessions with automatic branch routing.
 
 ## Installation
 
