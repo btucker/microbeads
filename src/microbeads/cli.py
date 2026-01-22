@@ -327,6 +327,7 @@ def create(ctx: Context, title: str, description: str, issue_type: str, priority
     """Create a new issue."""
     issue = issues.create_issue(
         title=title,
+        worktree=ctx.worktree,
         description=description,
         issue_type=issues.IssueType(issue_type),
         priority=priority,

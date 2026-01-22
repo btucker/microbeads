@@ -25,7 +25,7 @@ class Status(str, Enum):
     CLOSED = "closed"
 
 
-def generate_id(title: str, timestamp: datetime | None = None) -> str:
+def generate_id(title: str, prefix: str = "bd", timestamp: datetime | None = None) -> str:
     """Generate a short issue ID based on title and timestamp."""
     if timestamp is None:
         timestamp = datetime.now(timezone.utc)
@@ -34,7 +34,7 @@ def generate_id(title: str, timestamp: datetime | None = None) -> str:
     data = f"{title}{timestamp.isoformat()}".encode()
     hash_hex = hashlib.sha256(data).hexdigest()[:4]
 
-    return f"bd-{hash_hex}"
+    return f"{prefix}-{hash_hex}"
 
 
 def now_iso() -> str:
@@ -44,6 +44,7 @@ def now_iso() -> str:
 
 def create_issue(
     title: str,
+    worktree: Path,
     description: str = "",
     issue_type: IssueType = IssueType.TASK,
     priority: int = 2,
@@ -51,7 +52,8 @@ def create_issue(
 ) -> dict[str, Any]:
     """Create a new issue dictionary."""
     now = now_iso()
-    issue_id = generate_id(title)
+    prefix = repo.get_prefix(worktree)
+    issue_id = generate_id(title, prefix)
 
     return {
         "closed_at": None,

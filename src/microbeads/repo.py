@@ -48,6 +48,37 @@ def get_issues_path(worktree: Path) -> Path:
     return worktree / ISSUES_DIR
 
 
+def derive_prefix(repo_root: Path) -> str:
+    """Derive an issue ID prefix from the repository name.
+
+    Takes first letters of each word, or first 2-3 chars if single word.
+    Examples: "my-project" -> "mp", "microbeads" -> "mb", "foo_bar_baz" -> "fbb"
+    """
+    name = repo_root.name.lower()
+    # Split on common separators
+    parts = name.replace("-", "_").replace(".", "_").split("_")
+    parts = [p for p in parts if p]  # Remove empty
+
+    if len(parts) > 1:
+        # Multi-word: take first letter of each
+        prefix = "".join(p[0] for p in parts[:4])
+    else:
+        # Single word: take first 2 chars
+        prefix = name[:2]
+
+    return prefix
+
+
+def get_prefix(worktree: Path) -> str:
+    """Get the issue ID prefix from metadata."""
+    import json
+    metadata_path = get_beads_path(worktree) / "metadata.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text())
+        return metadata.get("id_prefix", "bd")
+    return "bd"
+
+
 def is_initialized(repo_root: Path) -> bool:
     """Check if microbeads is initialized in this repo."""
     worktree = get_worktree_path(repo_root)
@@ -111,9 +142,10 @@ def init(repo_root: Path) -> Path:
 
         # Create metadata file
         import json
+        prefix = derive_prefix(repo_root)
         metadata = {
             "version": "0.1.0",
-            "id_prefix": "bd"
+            "id_prefix": prefix
         }
         metadata_path = get_beads_path(worktree) / "metadata.json"
         metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
