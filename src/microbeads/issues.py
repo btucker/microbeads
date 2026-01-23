@@ -286,6 +286,23 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def hours_since(iso_timestamp: str | None) -> float | None:
+    """Calculate hours since an ISO timestamp.
+
+    Returns None if timestamp is invalid or missing.
+    """
+    if not iso_timestamp:
+        return None
+    try:
+        # Handle both 'Z' suffix and '+00:00' format
+        ts = iso_timestamp.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(ts)
+        delta = datetime.now(timezone.utc) - dt
+        return delta.total_seconds() / 3600
+    except (ValueError, TypeError):
+        return None
+
+
 def create_issue(
     title: str,
     worktree: Path,
@@ -662,6 +679,7 @@ def update_issue(
     design: str | None = None,
     notes: str | None = None,
     acceptance_criteria: str | None = None,
+    claimed_by: str | None = None,
 ) -> dict[str, Any]:
     """Update an issue's fields.
 
@@ -675,6 +693,7 @@ def update_issue(
         labels: Replace all labels (optional)
         add_labels: Labels to add (optional)
         remove_labels: Labels to remove (optional)
+        claimed_by: Agent/session identifier when claiming (optional)
 
     Raises:
         ValidationError: If any input validation fails
@@ -694,6 +713,19 @@ def update_issue(
     if status is not None and issue.get("status") != status.value:
         _add_history_entry(issue, "status", issue.get("status"), status.value, timestamp)
         issue["status"] = status.value
+
+        # Track ownership when claiming a task
+        if status == Status.IN_PROGRESS and claimed_by:
+            old_claimed = issue.get("claimed_by")
+            if old_claimed != claimed_by:
+                _add_history_entry(issue, "claimed_by", old_claimed, claimed_by, timestamp)
+            issue["claimed_by"] = claimed_by
+            issue["claimed_at"] = timestamp
+        # Clear ownership when moving away from in_progress
+        elif status != Status.IN_PROGRESS and issue.get("claimed_by"):
+            _add_history_entry(issue, "claimed_by", issue.get("claimed_by"), None, timestamp)
+            issue.pop("claimed_by", None)
+            issue.pop("claimed_at", None)
     if priority is not None:
         priority = validate_priority(priority)
         if issue.get("priority") != priority:
@@ -943,8 +975,19 @@ def get_open_blockers(
     return blockers
 
 
-def get_ready_issues(worktree: Path) -> list[dict[str, Any]]:
-    """Get issues that are ready to work on (open/in_progress with no open blockers)."""
+def get_ready_issues(worktree: Path, include_owned_by: str | None = None) -> list[dict[str, Any]]:
+    """Get issues that are ready to work on.
+
+    Args:
+        worktree: Path to the worktree
+        include_owned_by: If provided, include in_progress issues claimed by this owner.
+                         Otherwise only returns open issues.
+
+    Returns:
+        List of issues sorted by priority, then created_at.
+        - All open issues with no open blockers
+        - in_progress issues owned by include_owned_by (if specified)
+    """
     cache = load_active_issues(worktree)
     ready = []
 
@@ -954,8 +997,16 @@ def get_ready_issues(worktree: Path) -> list[dict[str, Any]]:
             continue
 
         open_blockers = get_open_blockers(issue, cache, worktree)
-        if not open_blockers:
+        if open_blockers:
+            continue
+
+        # Include open issues always
+        if status == Status.OPEN.value:
             ready.append(issue)
+        # Include in_progress only if owned by the specified owner
+        elif status == Status.IN_PROGRESS.value and include_owned_by:
+            if issue.get("claimed_by") == include_owned_by:
+                ready.append(issue)
 
     # Sort by priority, then created_at
     ready.sort(key=lambda x: (x.get("priority", 2), x.get("created_at", "")))
@@ -1065,14 +1116,21 @@ def _detect_cycle(
 def run_doctor(
     worktree: Path,
     fix: bool = False,
+    stale_hours: float = 24.0,
 ) -> dict[str, Any]:
     """Run health checks on issues and optionally fix problems.
 
     Checks for:
     - Orphaned dependencies (references to non-existent issues)
     - Stale blocked status (marked blocked but no open blockers)
+    - Stale ownership (in_progress but owner branch no longer exists)
     - Dependency cycles
     - Invalid field values
+
+    Args:
+        worktree: Path to the worktree
+        fix: If True, automatically fix problems where possible
+        stale_hours: Hours after which ownership is considered stale (default: 24)
 
     Returns a dict with 'problems' list and 'fixed' list.
     """
@@ -1141,6 +1199,37 @@ def run_doctor(
                 issue["updated_at"] = now_iso()
                 save_issue(worktree, issue)
                 issue_fixes.append("reset priority to 2")
+
+        # Check for stale ownership
+        if issue.get("status") == Status.IN_PROGRESS.value and issue.get("claimed_by"):
+            claimed_by = issue["claimed_by"]
+            claimed_at = issue.get("claimed_at")
+            age_hours = hours_since(claimed_at)
+
+            # Check if the owner branch still exists on remote
+            repo_root = repo.find_repo_root(worktree)
+            branch_exists = False
+            if repo_root:
+                branch_exists = repo.remote_branch_exists(repo_root, claimed_by)
+
+            # Consider stale if: branch doesn't exist AND claimed long enough ago
+            is_stale = not branch_exists and age_hours is not None and age_hours > stale_hours
+
+            if is_stale:
+                issue_problems.append(
+                    f"stale ownership: claimed by '{claimed_by}' {age_hours:.1f}h ago, branch no longer exists"
+                )
+                if fix:
+                    # Clear ownership and reset to open
+                    issue.pop("claimed_by", None)
+                    issue.pop("claimed_at", None)
+                    issue["status"] = Status.OPEN.value
+                    issue["updated_at"] = now_iso()
+                    _add_history_entry(
+                        issue, "status", Status.IN_PROGRESS.value, Status.OPEN.value, now_iso()
+                    )
+                    save_issue(worktree, issue)
+                    issue_fixes.append("cleared stale ownership and reset status to open")
 
         if issue_problems:
             problems.append({"id": issue_id, "title": issue["title"], "problems": issue_problems})

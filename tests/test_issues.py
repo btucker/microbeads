@@ -23,6 +23,7 @@ from microbeads.issues import (
     get_issue,
     get_open_blockers,
     get_ready_issues,
+    hours_since,
     issue_to_json,
     list_issues,
     load_active_issues,
@@ -40,6 +41,38 @@ from microbeads.issues import (
     validate_priority,
     validate_title,
 )
+
+
+class TestHoursSince:
+    """Tests for the hours_since helper function."""
+
+    def test_hours_since_valid_timestamp(self):
+        """Test calculating hours from a valid timestamp."""
+        result = hours_since("2020-01-01T00:00:00Z")
+        assert result is not None
+        assert result > 0
+
+    def test_hours_since_none_timestamp(self):
+        """Test that None timestamp returns None."""
+        result = hours_since(None)
+        assert result is None
+
+    def test_hours_since_invalid_timestamp(self):
+        """Test that invalid timestamp returns None."""
+        result = hours_since("not-a-timestamp")
+        assert result is None
+
+    def test_hours_since_empty_string(self):
+        """Test that empty string returns None."""
+        result = hours_since("")
+        assert result is None
+
+    def test_hours_since_recent_timestamp(self):
+        """Test that recent timestamp returns small value."""
+        recent = now_iso()
+        result = hours_since(recent)
+        assert result is not None
+        assert result < 1  # Less than 1 hour ago
 
 
 class TestGenerateId:
@@ -338,6 +371,128 @@ class TestUpdateIssue:
         """Test updating non-existent issue."""
         with pytest.raises(ValueError, match="Issue not found"):
             update_issue(mock_worktree, "nonexistent", status=Status.CLOSED)
+
+
+class TestOwnershipTracking:
+    """Tests for issue ownership tracking."""
+
+    def test_claim_issue_sets_ownership(self, mock_worktree: Path):
+        """Test that claiming an issue sets claimed_by and claimed_at."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(
+            mock_worktree, issue["id"], status=Status.IN_PROGRESS, claimed_by="my-branch"
+        )
+        assert updated["claimed_by"] == "my-branch"
+        assert "claimed_at" in updated
+
+    def test_claim_without_owner_no_tracking(self, mock_worktree: Path):
+        """Test that claiming without claimed_by doesn't set ownership."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(mock_worktree, issue["id"], status=Status.IN_PROGRESS)
+        assert "claimed_by" not in updated
+        assert "claimed_at" not in updated
+
+    def test_status_change_clears_ownership(self, mock_worktree: Path):
+        """Test that changing status away from in_progress clears ownership."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        # Claim the issue
+        updated = update_issue(
+            mock_worktree, issue["id"], status=Status.IN_PROGRESS, claimed_by="my-branch"
+        )
+        assert updated["claimed_by"] == "my-branch"
+
+        # Move back to open - should clear ownership
+        updated = update_issue(mock_worktree, issue["id"], status=Status.OPEN)
+        assert "claimed_by" not in updated
+        assert "claimed_at" not in updated
+
+    def test_ownership_tracked_in_history(self, mock_worktree: Path):
+        """Test that ownership changes are recorded in history."""
+        issue = create_issue("Test", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        updated = update_issue(
+            mock_worktree, issue["id"], status=Status.IN_PROGRESS, claimed_by="branch-1"
+        )
+
+        history = updated.get("history", [])
+        claim_entries = [h for h in history if h.get("field") == "claimed_by"]
+        assert len(claim_entries) == 1
+        assert claim_entries[0]["new"] == "branch-1"
+
+
+class TestGetReadyIssuesWithOwnership:
+    """Tests for get_ready_issues with ownership filtering."""
+
+    def test_ready_issues_excludes_others_in_progress(self, mock_worktree: Path):
+        """Test that in_progress issues owned by others are excluded."""
+        # Create an open issue
+        open_issue = create_issue("Open issue", mock_worktree)
+        save_issue(mock_worktree, open_issue)
+
+        # Create an in_progress issue owned by another branch
+        claimed_issue = create_issue("Claimed issue", mock_worktree)
+        save_issue(mock_worktree, claimed_issue)
+        update_issue(
+            mock_worktree,
+            claimed_issue["id"],
+            status=Status.IN_PROGRESS,
+            claimed_by="other-branch",
+        )
+
+        # Get ready issues for "my-branch"
+        ready = get_ready_issues(mock_worktree, include_owned_by="my-branch")
+
+        ids = [i["id"] for i in ready]
+        assert open_issue["id"] in ids
+        assert claimed_issue["id"] not in ids
+
+    def test_ready_issues_includes_own_in_progress(self, mock_worktree: Path):
+        """Test that in_progress issues owned by current branch are included."""
+        # Create an in_progress issue owned by my branch
+        my_issue = create_issue("My issue", mock_worktree)
+        save_issue(mock_worktree, my_issue)
+        update_issue(
+            mock_worktree,
+            my_issue["id"],
+            status=Status.IN_PROGRESS,
+            claimed_by="my-branch",
+        )
+
+        # Get ready issues for "my-branch"
+        ready = get_ready_issues(mock_worktree, include_owned_by="my-branch")
+
+        ids = [i["id"] for i in ready]
+        assert my_issue["id"] in ids
+
+    def test_ready_issues_without_owner_excludes_all_in_progress(self, mock_worktree: Path):
+        """Test that without owner filter, all in_progress issues are excluded."""
+        # Create an open issue
+        open_issue = create_issue("Open issue", mock_worktree)
+        save_issue(mock_worktree, open_issue)
+
+        # Create an in_progress issue
+        claimed_issue = create_issue("Claimed issue", mock_worktree)
+        save_issue(mock_worktree, claimed_issue)
+        update_issue(
+            mock_worktree,
+            claimed_issue["id"],
+            status=Status.IN_PROGRESS,
+            claimed_by="some-branch",
+        )
+
+        # Get ready issues without owner filter
+        ready = get_ready_issues(mock_worktree)
+
+        ids = [i["id"] for i in ready]
+        assert open_issue["id"] in ids
+        assert claimed_issue["id"] not in ids
 
 
 class TestCloseReopenIssue:
@@ -1056,6 +1211,82 @@ class TestDoctorCommand:
             p for p in result["problems"] if any("cycle" in prob for prob in p["problems"])
         ]
         assert len(cycle_problems) >= 1
+
+    def test_doctor_detects_stale_ownership(self, mock_worktree: Path):
+        """Test doctor detects stale ownership (branch gone, old claim)."""
+        issue = create_issue("Stale issue", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        # Claim with a non-existent branch and old timestamp
+        updated = update_issue(
+            mock_worktree,
+            issue["id"],
+            status=Status.IN_PROGRESS,
+            claimed_by="deleted-branch-xyz",
+        )
+        # Manually set claimed_at to 48 hours ago
+        old_time = "2020-01-01T00:00:00Z"
+        updated["claimed_at"] = old_time
+        save_issue(mock_worktree, updated)
+
+        # Run doctor with a short stale threshold
+        result = run_doctor(mock_worktree, stale_hours=1.0)
+
+        stale_problems = [
+            p
+            for p in result["problems"]
+            if any("stale ownership" in prob for prob in p["problems"])
+        ]
+        assert len(stale_problems) == 1
+
+    def test_doctor_fixes_stale_ownership(self, mock_worktree: Path):
+        """Test doctor can fix stale ownership by clearing and reopening."""
+        issue = create_issue("Stale issue", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        # Claim with a non-existent branch and old timestamp
+        updated = update_issue(
+            mock_worktree,
+            issue["id"],
+            status=Status.IN_PROGRESS,
+            claimed_by="deleted-branch-xyz",
+        )
+        updated["claimed_at"] = "2020-01-01T00:00:00Z"
+        save_issue(mock_worktree, updated)
+
+        # Run doctor with fix=True
+        result = run_doctor(mock_worktree, fix=True, stale_hours=1.0)
+
+        assert len(result["fixed"]) == 1
+        assert "cleared stale ownership" in result["fixed"][0]["fixes"][0]
+
+        # Verify the issue was fixed
+        fixed_issue = get_issue(mock_worktree, issue["id"])
+        assert fixed_issue["status"] == "open"
+        assert "claimed_by" not in fixed_issue
+
+    def test_doctor_ignores_active_ownership(self, mock_worktree: Path):
+        """Test doctor doesn't flag ownership on branches that exist."""
+        issue = create_issue("Active issue", mock_worktree)
+        save_issue(mock_worktree, issue)
+
+        # Claim with a recent timestamp (branch check will fail but timestamp is recent)
+        update_issue(
+            mock_worktree,
+            issue["id"],
+            status=Status.IN_PROGRESS,
+            claimed_by="some-branch",
+        )
+
+        # Run doctor - should not detect as stale because timestamp is recent
+        result = run_doctor(mock_worktree, stale_hours=24.0)
+
+        stale_problems = [
+            p
+            for p in result["problems"]
+            if any("stale ownership" in prob for prob in p["problems"])
+        ]
+        assert len(stale_problems) == 0
 
 
 class TestDiskCache:

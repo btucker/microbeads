@@ -255,6 +255,78 @@ mb hooks remove --global
 
 This adds a `SessionStart` hook that runs `mb prime` to remind the AI agent of the microbeads workflow.
 
+### Continuous Work with Stop Hooks
+
+Microbeads can use Claude Code's Stop hook to prompt the agent to continue with additional related issues when it would otherwise stop:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run mb continue"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The `mb continue` command:
+- Checks for ready issues when the agent is about to stop
+- **Branch-aware**: On feature branches (`claude/`, `feature/`, etc.), only suggests issues related to that branch context (matching issue IDs, labels, or title keywords)
+- **Prevents infinite loops**: Uses `stop_hook_active` to avoid re-triggering
+- Returns `{"decision": "block", "reason": "..."}` to continue, or exits silently to allow stopping
+
+### Issue Ownership
+
+When an agent marks an issue as `in_progress`, microbeads tracks ownership:
+
+```bash
+mb update mi-abc -s in_progress
+# Records: claimed_by = current branch, claimed_at = timestamp
+# Automatically runs: mb sync
+```
+
+**Ownership features:**
+
+- **Automatic tracking**: The current git branch is recorded as `claimed_by`
+- **Race condition prevention**: Auto-sync on claim prevents multiple agents from picking up the same task
+- **Smart filtering**: `mb ready` shows open issues plus your own in_progress issues
+- **Visibility**: `mb show <id>` displays ownership info
+
+```bash
+$ mb show mi-abc
+ID:          mi-abc
+Title:       Fix authentication bug
+Status:      in_progress
+Claimed by:  claude/feature-auth-xyz
+Claimed at:  2026-01-23T12:40:15Z
+...
+```
+
+Ownership is cleared when status changes away from `in_progress` (e.g., back to `open` or `closed`).
+
+**Stale ownership detection**: `mb doctor` detects abandoned tasks where the owner branch no longer exists on remote and the claim is older than 24 hours:
+
+```bash
+$ mb doctor
+Found 1 issues with problems:
+  mi-abc: Fix authentication bug
+    - stale ownership: claimed by 'deleted-branch-xyz' 48.0h ago, branch no longer exists
+
+Run with --fix to automatically fix problems.
+
+$ mb doctor --fix
+Fixed 1 issues:
+  ✓ mi-abc: cleared stale ownership and reset status to open
+```
+
 ## For AI Agents
 
 See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
