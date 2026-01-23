@@ -7,13 +7,13 @@ Microbeads is a simplified git-backed issue tracker. Issues are JSON files on th
 ## Quick Reference
 
 ```bash
-mb create "Title" -p 1 -t bug -l backend   # Create issue
+mb create "Title" -d "Description of the work" -p 1 -t bug   # Create issue
 mb list                                     # All issues
 mb ready                                    # Issues with no blockers
-mb show bd-abc                              # Show details
-mb update bd-abc -s in_progress             # Change status
-mb close bd-abc -r "Completed"              # Close with reason
-mb dep add bd-child bd-parent               # Add dependency
+mb show mi-abc                              # Show details
+mb update mi-abc -s in_progress             # Change status
+mb close mi-abc -r "Completed"              # Close with reason
+mb dep add mi-child mi-parent               # Add dependency
 mb sync                                     # Commit and push to orphan branch
 ```
 
@@ -38,7 +38,7 @@ Include the issue ID in task names for linking.
 ```bash
 # 1. Session Start: Check issues and create tasks
 mb ready                                    # See what's available
-mb create "New feature" -p 1 -t feature     # Create issue if needed
+mb create "New feature" -d "Implement X for Y" -p 1 -t feature   # Create issue
 
 # 2. Create TodoWrite tasks with issue IDs:
 #    "[mi-abc123] Implement feature"
@@ -50,7 +50,7 @@ mb create "New feature" -p 1 -t feature     # Create issue if needed
 #    - Status mapping: pending→open, in_progress→in_progress, completed→closed
 
 # 4. Exploration: file issues for anything worth addressing later
-mb create "Found edge case" -p 2 -t bug
+mb create "Found edge case" -d "When X happens, Y breaks" -p 2 -t bug
 mb dep add mi-new mi-existing
 
 # 5. Session End: Close issues and sync

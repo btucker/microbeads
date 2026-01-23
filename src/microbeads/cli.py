@@ -21,7 +21,7 @@ Include the issue ID in task names for linking (e.g., "[mi-abc123] Fix the bug")
 
 ### Session Start
 1. Check ready issues: `{cmd} ready`
-2. Create issue for new work: `{cmd} create "title" -p N -t type`
+2. Create issue for new work: `{cmd} create "title" -d "description" -p N -t type`
 3. Add tasks to TodoWrite with issue IDs in names
 
 ### During Work
@@ -36,11 +36,11 @@ Include the issue ID in task names for linking (e.g., "[mi-abc123] Fix the bug")
 
 ## Quick Reference
 ```
-{cmd} ready                         # Issues ready to work on
-{cmd} create "title" -p N -t type   # Create new issue
-{cmd} close <id> -r "reason"        # Complete issue
-{cmd} tasks list                    # View synced tasks
-{cmd} sync                          # Save to git
+{cmd} ready                                    # Issues ready to work on
+{cmd} create "title" -d "desc" -p N -t type    # Create new issue
+{cmd} close <id> -r "reason"                   # Complete issue
+{cmd} tasks list                               # View synced tasks
+{cmd} sync                                     # Save to git
 ```
 
 ## Status: open | in_progress | blocked | closed
