@@ -421,6 +421,7 @@ def create(
         )
         issues.save_issue(ctx.worktree, issue)
         output(ctx, issue, f"Created {issue['id']}: {title}")
+        _sync_async(ctx.repo_root)
     except ValidationError as e:
         raise click.ClickException(str(e)) from None
 
@@ -554,6 +555,8 @@ def update(
         if status == "in_progress":
             repo.sync(ctx.repo_root, f"Claim {issue_id}")
             issues.clear_cache(ctx.worktree, include_disk=True)
+        else:
+            _sync_async(ctx.repo_root)
     except (ValueError, ValidationError) as e:
         raise click.ClickException(str(e)) from None
 
@@ -567,6 +570,7 @@ def close(ctx: Context, issue_id: str, reason: str):
     try:
         issue = issues.close_issue(ctx.worktree, issue_id, reason)
         output(ctx, issue, f"Closed {issue['id']}")
+        _sync_async(ctx.repo_root)
     except ValueError as e:
         raise click.ClickException(str(e)) from None
 
@@ -579,6 +583,7 @@ def reopen(ctx: Context, issue_id: str):
     try:
         issue = issues.reopen_issue(ctx.worktree, issue_id)
         output(ctx, issue, f"Reopened {issue['id']}")
+        _sync_async(ctx.repo_root)
     except ValueError as e:
         raise click.ClickException(str(e)) from None
 
@@ -638,6 +643,7 @@ def dep_add(ctx: Context, child_id: str, parent_id: str):
     try:
         issue = issues.add_dependency(ctx.worktree, child_id, parent_id)
         output(ctx, issue, f"{issue['id']} now depends on {parent_id}")
+        _sync_async(ctx.repo_root)
     except (ValueError, ValidationError) as e:
         raise click.ClickException(str(e)) from None
 
@@ -651,6 +657,7 @@ def dep_rm(ctx: Context, child_id: str, parent_id: str):
     try:
         issue = issues.remove_dependency(ctx.worktree, child_id, parent_id)
         output(ctx, issue, f"Removed dependency from {issue['id']} to {parent_id}")
+        _sync_async(ctx.repo_root)
     except ValueError as e:
         raise click.ClickException(str(e)) from None
 
@@ -851,6 +858,8 @@ def tasks_sync(ctx: Context, from_stdin: bool, json_input: str | None):
         else:
             click.echo("No tasks to sync.")
 
+    _sync_async(ctx.repo_root)
+
 
 @tasks.command("list")
 @pass_context
@@ -908,6 +917,7 @@ def tasks_clear(ctx: Context, force: bool):
         {"closed": closed},
         f"Closed {closed} task issue(s).",
     )
+    _sync_async(ctx.repo_root)
 
 
 @tasks.command("hook", hidden=True)
@@ -960,6 +970,7 @@ def tasks_hook(ctx: Context):
     # Sync tasks (silently - don't output anything that would confuse Claude)
     try:
         issues.sync_tasks(ctx.worktree, tasks_data)
+        _sync_async(ctx.repo_root)
     except Exception:
         # Silently ignore errors to avoid breaking Claude Code
         pass
@@ -975,6 +986,32 @@ def _get_current_branch() -> str | None:
     if result.returncode == 0:
         return result.stdout.strip()
     return None
+
+
+def _sync_async(repo_root: Path) -> None:
+    """Run sync in the background without blocking.
+
+    Spawns a detached subprocess to commit and push changes asynchronously.
+    This allows the CLI to return immediately while sync happens in the background.
+
+    Set MICROBEADS_NO_ASYNC_SYNC=1 to disable (useful for tests).
+    """
+    import os
+
+    if os.environ.get("MICROBEADS_NO_ASYNC_SYNC"):
+        return
+
+    cmd = get_command_name()
+    # Use subprocess.Popen with start_new_session to fully detach
+    # Redirect all output to devnull so it doesn't interfere with terminal
+    subprocess.Popen(
+        [cmd, "sync"],
+        cwd=repo_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
 
 
 def _is_feature_branch(branch: str | None) -> bool:

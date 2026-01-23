@@ -8,6 +8,12 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def disable_async_sync(monkeypatch):
+    """Disable async sync for all tests to prevent race conditions."""
+    monkeypatch.setenv("MICROBEADS_NO_ASYNC_SYNC", "1")
+
+
 @pytest.fixture
 def temp_git_repo(tmp_path: Path) -> Path:
     """Create a temporary git repository for testing."""
