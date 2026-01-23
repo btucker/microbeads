@@ -1,0 +1,39 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T11:05:30Z",
+  "closed_reason": "Task list cleared",
+  "created_at": "2026-01-23T11:04:54Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T11:05:12Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-23T11:05:12Z",
+      "field": "notes",
+      "new": "(changed)",
+      "old": "(changed)"
+    },
+    {
+      "at": "2026-01-23T11:05:30Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-247f88d7",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Working on task 1",
+  "priority": 2,
+  "status": "closed",
+  "title": "Test task 1",
+  "type": "task",
+  "updated_at": "2026-01-23T11:05:30Z"
+}

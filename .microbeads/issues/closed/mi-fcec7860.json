@@ -1,7 +1,7 @@
 {
   "acceptance_criteria": "",
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-23T11:08:01Z",
+  "closed_reason": "Implemented task sync with PostToolUse hook and anti-duplication logic",
   "created_at": "2026-01-22T21:58:12Z",
   "dependencies": [],
   "description": "",
@@ -12,14 +12,20 @@
       "field": "status",
       "new": "in_progress",
       "old": "open"
+    },
+    {
+      "at": "2026-01-23T11:08:01Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
     }
   ],
   "id": "mi-fcec7860",
   "labels": [],
   "notes": "",
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Persist Claude Code tasks via TodoWrite hook",
   "type": "feature",
-  "updated_at": "2026-01-22T21:58:24Z"
+  "updated_at": "2026-01-23T11:08:01Z"
 }
