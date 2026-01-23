@@ -283,16 +283,49 @@ The `mb continue` command:
 - **Prevents infinite loops**: Uses `stop_hook_active` to avoid re-triggering
 - Returns `{"decision": "block", "reason": "..."}` to continue, or exits silently to allow stopping
 
-### Race Condition Prevention
+### Issue Ownership
 
-When an agent marks an issue as `in_progress`, microbeads automatically syncs to the remote to prevent multiple agents from claiming the same task:
+When an agent marks an issue as `in_progress`, microbeads tracks ownership:
 
 ```bash
 mb update mi-abc -s in_progress
+# Records: claimed_by = current branch, claimed_at = timestamp
 # Automatically runs: mb sync
 ```
 
-This is especially important for multi-agent scenarios where several agents may be checking for ready issues simultaneously.
+**Ownership features:**
+
+- **Automatic tracking**: The current git branch is recorded as `claimed_by`
+- **Race condition prevention**: Auto-sync on claim prevents multiple agents from picking up the same task
+- **Smart filtering**: `mb ready` shows open issues plus your own in_progress issues
+- **Visibility**: `mb show <id>` displays ownership info
+
+```bash
+$ mb show mi-abc
+ID:          mi-abc
+Title:       Fix authentication bug
+Status:      in_progress
+Claimed by:  claude/feature-auth-xyz
+Claimed at:  2026-01-23T12:40:15Z
+...
+```
+
+Ownership is cleared when status changes away from `in_progress` (e.g., back to `open` or `closed`).
+
+**Stale ownership detection**: `mb doctor` detects abandoned tasks where the owner branch no longer exists on remote and the claim is older than 24 hours:
+
+```bash
+$ mb doctor
+Found 1 issues with problems:
+  mi-abc: Fix authentication bug
+    - stale ownership: claimed by 'deleted-branch-xyz' 48.0h ago, branch no longer exists
+
+Run with --fix to automatically fix problems.
+
+$ mb doctor --fix
+Fixed 1 issues:
+  ✓ mi-abc: cleared stale ownership and reset status to open
+```
 
 ## For AI Agents
 

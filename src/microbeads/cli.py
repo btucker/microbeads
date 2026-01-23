@@ -582,8 +582,14 @@ def reopen(ctx: Context, issue_id: str):
 @main.command()
 @pass_context
 def ready(ctx: Context):
-    """Show issues ready to work on (no open blockers)."""
-    result = issues.get_ready_issues(ctx.worktree)
+    """Show issues ready to work on (no open blockers).
+
+    Includes:
+    - All open issues with no blockers
+    - in_progress issues owned by the current branch
+    """
+    current_branch = _get_current_branch()
+    result = issues.get_ready_issues(ctx.worktree, include_owned_by=current_branch)
 
     if ctx.json_output:
         output(ctx, result)
@@ -852,9 +858,10 @@ def continue_cmd():
     if repo_root is None or not repo.is_initialized(repo_root):
         sys.exit(0)
 
-    # Get ready issues - only open ones, not in_progress (already claimed)
+    # Get ready issues - open ones plus our own in_progress issues
     worktree = repo.get_worktree_path(repo_root)
-    ready_issues = [i for i in issues.get_ready_issues(worktree) if i.get("status") == "open"]
+    current_branch = _get_current_branch()
+    ready_issues = issues.get_ready_issues(worktree, include_owned_by=current_branch)
 
     if not ready_issues:
         # No ready issues, allow stop
