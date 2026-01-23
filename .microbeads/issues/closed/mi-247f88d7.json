@@ -1,7 +1,7 @@
 {
   "acceptance_criteria": "",
-  "closed_at": "2026-01-23T13:21:09Z",
-  "closed_reason": "Old test task",
+  "closed_at": "2026-01-23T13:25:45Z",
+  "closed_reason": "Test cleanup",
   "created_at": "2026-01-23T11:04:54Z",
   "dependencies": [],
   "description": "",
@@ -30,6 +30,12 @@
       "field": "status",
       "new": "closed",
       "old": "closed"
+    },
+    {
+      "at": "2026-01-23T13:25:45Z",
+      "field": "status",
+      "new": "closed",
+      "old": "closed"
     }
   ],
   "id": "mi-247f88d7",
@@ -41,5 +47,5 @@
   "status": "closed",
   "title": "Test task 1",
   "type": "task",
-  "updated_at": "2026-01-23T13:21:09Z"
+  "updated_at": "2026-01-23T13:25:45Z"
 }

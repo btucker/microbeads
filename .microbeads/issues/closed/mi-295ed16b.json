@@ -1,0 +1,39 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T13:25:48Z",
+  "closed_reason": "Test cleanup",
+  "created_at": "2026-01-23T13:25:31Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T13:25:32Z",
+      "field": "title",
+      "new": "[mi-aabbcc11] Test stripping works",
+      "old": "[mi-placeholder] Test stripping works"
+    },
+    {
+      "at": "2026-01-23T13:25:32Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    },
+    {
+      "at": "2026-01-23T13:25:48Z",
+      "field": "status",
+      "new": "closed",
+      "old": "closed"
+    }
+  ],
+  "id": "mi-295ed16b",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Working",
+  "priority": 2,
+  "status": "closed",
+  "title": "[mi-aabbcc11] Test stripping works",
+  "type": "task",
+  "updated_at": "2026-01-23T13:25:48Z"
+}

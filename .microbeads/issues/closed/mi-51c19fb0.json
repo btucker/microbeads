@@ -1,33 +1,33 @@
 {
   "acceptance_criteria": "",
-  "closed_at": "2026-01-23T13:25:46Z",
+  "closed_at": "2026-01-23T13:25:47Z",
   "closed_reason": "Test cleanup",
-  "created_at": "2026-01-23T13:21:23Z",
+  "created_at": "2026-01-23T13:24:24Z",
   "dependencies": [],
   "description": "",
   "design": "",
   "history": [
     {
-      "at": "2026-01-23T13:21:37Z",
+      "at": "2026-01-23T13:25:31Z",
       "field": "status",
       "new": "closed",
-      "old": "closed"
+      "old": "in_progress"
     },
     {
-      "at": "2026-01-23T13:25:46Z",
+      "at": "2026-01-23T13:25:47Z",
       "field": "status",
       "new": "closed",
       "old": "closed"
     }
   ],
-  "id": "mi-c21820d3",
+  "id": "mi-51c19fb0",
   "labels": [
     "claude-task"
   ],
-  "notes": "Verified task sync",
+  "notes": "Working",
   "priority": 2,
   "status": "closed",
-  "title": "[mi-9b8fa14c] Verify task sync is working",
+  "title": "[mi-test] Original prefix test",
   "type": "task",
-  "updated_at": "2026-01-23T13:25:46Z"
+  "updated_at": "2026-01-23T13:25:47Z"
 }
