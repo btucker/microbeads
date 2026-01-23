@@ -839,9 +839,9 @@ def continue_cmd():
     if repo_root is None or not repo.is_initialized(repo_root):
         sys.exit(0)
 
-    # Get ready issues
+    # Get ready issues - only open ones, not in_progress (already claimed)
     worktree = repo.get_worktree_path(repo_root)
-    ready_issues = issues.get_ready_issues(worktree)
+    ready_issues = [i for i in issues.get_ready_issues(worktree) if i.get("status") == "open"]
 
     if not ready_issues:
         # No ready issues, allow stop
