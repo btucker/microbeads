@@ -127,6 +127,11 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
     if issue.get("dependencies"):
         lines.append(f"Depends on:  {', '.join(issue['dependencies'])}")
 
+    if issue.get("claimed_by"):
+        lines.append(f"Claimed by:  {issue['claimed_by']}")
+        if issue.get("claimed_at"):
+            lines.append(f"Claimed at:  {issue['claimed_at']}")
+
     lines.append(f"Created:     {issue.get('created_at', 'unknown')}")
     lines.append(f"Updated:     {issue.get('updated_at', 'unknown')}")
 
@@ -514,9 +519,16 @@ def update(
 
     Note: When setting status to 'in_progress', automatically syncs to
     prevent race conditions with multiple agents picking up the same task.
+    The current branch is recorded as the owner (claimed_by).
     """
     try:
         status_enum = issues.Status(status) if status else None
+
+        # Track ownership when claiming a task
+        claimed_by = None
+        if status == "in_progress":
+            claimed_by = _get_current_branch() or "unknown"
+
         issue = issues.update_issue(
             ctx.worktree,
             issue_id,
@@ -530,6 +542,7 @@ def update(
             design=design,
             notes=notes,
             acceptance_criteria=acceptance_criteria,
+            claimed_by=claimed_by,
         )
         output(ctx, issue, f"Updated {issue['id']}")
 

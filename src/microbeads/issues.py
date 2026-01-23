@@ -662,6 +662,7 @@ def update_issue(
     design: str | None = None,
     notes: str | None = None,
     acceptance_criteria: str | None = None,
+    claimed_by: str | None = None,
 ) -> dict[str, Any]:
     """Update an issue's fields.
 
@@ -675,6 +676,7 @@ def update_issue(
         labels: Replace all labels (optional)
         add_labels: Labels to add (optional)
         remove_labels: Labels to remove (optional)
+        claimed_by: Agent/session identifier when claiming (optional)
 
     Raises:
         ValidationError: If any input validation fails
@@ -694,6 +696,19 @@ def update_issue(
     if status is not None and issue.get("status") != status.value:
         _add_history_entry(issue, "status", issue.get("status"), status.value, timestamp)
         issue["status"] = status.value
+
+        # Track ownership when claiming a task
+        if status == Status.IN_PROGRESS and claimed_by:
+            old_claimed = issue.get("claimed_by")
+            if old_claimed != claimed_by:
+                _add_history_entry(issue, "claimed_by", old_claimed, claimed_by, timestamp)
+            issue["claimed_by"] = claimed_by
+            issue["claimed_at"] = timestamp
+        # Clear ownership when moving away from in_progress
+        elif status != Status.IN_PROGRESS and issue.get("claimed_by"):
+            _add_history_entry(issue, "claimed_by", issue.get("claimed_by"), None, timestamp)
+            issue.pop("claimed_by", None)
+            issue.pop("claimed_at", None)
     if priority is not None:
         priority = validate_priority(priority)
         if issue.get("priority") != priority:
