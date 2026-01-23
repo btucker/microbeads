@@ -1,0 +1,27 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T13:21:37Z",
+  "closed_reason": "Test complete",
+  "created_at": "2026-01-23T13:21:23Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T13:21:37Z",
+      "field": "status",
+      "new": "closed",
+      "old": "closed"
+    }
+  ],
+  "id": "mi-c21820d3",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Verified task sync",
+  "priority": 2,
+  "status": "closed",
+  "title": "[mi-9b8fa14c] Verify task sync is working",
+  "type": "task",
+  "updated_at": "2026-01-23T13:21:37Z"
+}

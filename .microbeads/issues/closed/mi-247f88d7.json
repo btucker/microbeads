@@ -1,7 +1,7 @@
 {
   "acceptance_criteria": "",
-  "closed_at": "2026-01-23T11:05:30Z",
-  "closed_reason": "Task list cleared",
+  "closed_at": "2026-01-23T13:21:09Z",
+  "closed_reason": "Old test task",
   "created_at": "2026-01-23T11:04:54Z",
   "dependencies": [],
   "description": "",
@@ -24,6 +24,12 @@
       "field": "status",
       "new": "closed",
       "old": "in_progress"
+    },
+    {
+      "at": "2026-01-23T13:21:09Z",
+      "field": "status",
+      "new": "closed",
+      "old": "closed"
     }
   ],
   "id": "mi-247f88d7",
@@ -35,5 +41,5 @@
   "status": "closed",
   "title": "Test task 1",
   "type": "task",
-  "updated_at": "2026-01-23T11:05:30Z"
+  "updated_at": "2026-01-23T13:21:09Z"
 }
