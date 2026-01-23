@@ -1,7 +1,7 @@
 {
   "acceptance_criteria": "",
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-23T12:39:33Z",
+  "closed_reason": "Updated PRIME_TEMPLATE and AGENTS.md with task-driven workflow instructions",
   "created_at": "2026-01-23T12:38:03Z",
   "dependencies": [],
   "description": "",
@@ -12,14 +12,20 @@
       "field": "status",
       "new": "in_progress",
       "old": "open"
+    },
+    {
+      "at": "2026-01-23T12:39:33Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
     }
   ],
   "id": "mi-84255579",
   "labels": [],
   "notes": "",
   "priority": 1,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Update agent instructions for task-driven workflow",
   "type": "task",
-  "updated_at": "2026-01-23T12:38:14Z"
+  "updated_at": "2026-01-23T12:39:33Z"
 }
