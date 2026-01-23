@@ -131,6 +131,11 @@ def format_issue_detail(issue: dict[str, Any]) -> str:
     if issue.get("dependencies"):
         lines.append(f"Depends on:  {', '.join(issue['dependencies'])}")
 
+    if issue.get("claimed_by"):
+        lines.append(f"Claimed by:  {issue['claimed_by']}")
+        if issue.get("claimed_at"):
+            lines.append(f"Claimed at:  {issue['claimed_at']}")
+
     lines.append(f"Created:     {issue.get('created_at', 'unknown')}")
     lines.append(f"Updated:     {issue.get('updated_at', 'unknown')}")
 
@@ -514,9 +519,20 @@ def update(
     notes: str | None,
     acceptance_criteria: str | None,
 ):
-    """Update an issue."""
+    """Update an issue.
+
+    Note: When setting status to 'in_progress', automatically syncs to
+    prevent race conditions with multiple agents picking up the same task.
+    The current branch is recorded as the owner (claimed_by).
+    """
     try:
         status_enum = issues.Status(status) if status else None
+
+        # Track ownership when claiming a task
+        claimed_by = None
+        if status == "in_progress":
+            claimed_by = _get_current_branch() or "unknown"
+
         issue = issues.update_issue(
             ctx.worktree,
             issue_id,
@@ -530,8 +546,14 @@ def update(
             design=design,
             notes=notes,
             acceptance_criteria=acceptance_criteria,
+            claimed_by=claimed_by,
         )
         output(ctx, issue, f"Updated {issue['id']}")
+
+        # Auto-sync when claiming a task to prevent race conditions
+        if status == "in_progress":
+            repo.sync(ctx.repo_root, f"Claim {issue_id}")
+            issues.clear_cache(ctx.worktree, include_disk=True)
     except (ValueError, ValidationError) as e:
         raise click.ClickException(str(e)) from None
 
@@ -564,8 +586,14 @@ def reopen(ctx: Context, issue_id: str):
 @main.command()
 @pass_context
 def ready(ctx: Context):
-    """Show issues ready to work on (no open blockers)."""
-    result = issues.get_ready_issues(ctx.worktree)
+    """Show issues ready to work on (no open blockers).
+
+    Includes:
+    - All open issues with no blockers
+    - in_progress issues owned by the current branch
+    """
+    current_branch = _get_current_branch()
+    result = issues.get_ready_issues(ctx.worktree, include_owned_by=current_branch)
 
     if ctx.json_output:
         output(ctx, result)
@@ -935,6 +963,140 @@ def tasks_hook(ctx: Context):
     except Exception:
         # Silently ignore errors to avoid breaking Claude Code
         pass
+
+
+def _get_current_branch() -> str | None:
+    """Get the current git branch name."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+    return None
+
+
+def _is_feature_branch(branch: str | None) -> bool:
+    """Check if branch appears to be a feature/work branch."""
+    if not branch:
+        return False
+    # Common feature branch patterns
+    prefixes = ("feature/", "fix/", "bugfix/", "chore/", "claude/", "user/")
+    return branch.startswith(prefixes) or "/" in branch
+
+
+def _filter_related_issues(
+    ready_issues: list[dict[str, Any]], branch: str | None
+) -> list[dict[str, Any]]:
+    """Filter issues to those related to the current branch context.
+
+    Matches issues by:
+    - Issue ID appearing in branch name
+    - Issue labels matching branch name components
+    """
+    if not branch or not _is_feature_branch(branch):
+        # On main/master, all issues are relevant
+        return ready_issues
+
+    related = []
+    branch_lower = branch.lower()
+
+    for issue in ready_issues:
+        issue_id = issue.get("id", "")
+        labels = issue.get("labels", [])
+        title = issue.get("title", "").lower()
+
+        # Check if issue ID is in branch name
+        if issue_id.lower() in branch_lower:
+            related.append(issue)
+            continue
+
+        # Check if any label matches branch components
+        branch_parts = set(branch_lower.replace("-", "/").replace("_", "/").split("/"))
+        for label in labels:
+            if label.lower() in branch_parts:
+                related.append(issue)
+                break
+
+        # Check if keywords from title are in branch
+        title_words = set(title.split())
+        if len(title_words & branch_parts) >= 2:
+            related.append(issue)
+
+    return related
+
+
+@main.command("continue")
+def continue_cmd():
+    """Check for ready issues and optionally block agent from stopping.
+
+    Designed for Claude Code Stop hooks. Reads hook input from stdin
+    and outputs JSON to block stopping if there are ready issues.
+
+    Branch-aware: On feature branches (claude/, feature/, etc.), only
+    suggests issues related to that branch context. On main/master,
+    suggests all ready issues.
+
+    Returns {"decision": "block", "reason": "..."} if agent should continue,
+    or exits silently to allow stopping.
+    """
+    # Read hook input from stdin
+    try:
+        hook_input = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, Exception):
+        # If no valid input, allow stop
+        sys.exit(0)
+
+    # Prevent infinite loops - if already continuing from a stop hook, allow stop
+    if hook_input.get("stop_hook_active"):
+        sys.exit(0)
+
+    # Check if we're in a git repo with microbeads
+    repo_root = repo.find_repo_root()
+    if repo_root is None or not repo.is_initialized(repo_root):
+        sys.exit(0)
+
+    # Get ready issues - open ones plus our own in_progress issues
+    worktree = repo.get_worktree_path(repo_root)
+    current_branch = _get_current_branch()
+    ready_issues = issues.get_ready_issues(worktree, include_owned_by=current_branch)
+
+    if not ready_issues:
+        # No ready issues, allow stop
+        sys.exit(0)
+
+    # Filter to issues related to current branch context
+    current_branch = _get_current_branch()
+    related_issues = _filter_related_issues(ready_issues, current_branch)
+
+    if not related_issues:
+        # No related issues for this branch, allow stop
+        # (Agent shouldn't mix unrelated work into feature branches)
+        sys.exit(0)
+
+    # Format issues for the agent
+    cmd = get_command_name()
+    issue_lines = []
+    for issue in related_issues[:5]:  # Limit to top 5 by priority
+        priority = issue.get("priority", 2)
+        issue_lines.append(f"  - {issue['id']} (P{priority}): {issue['title']}")
+
+    issues_text = "\n".join(issue_lines)
+    reason = f"""There are {len(related_issues)} related issue(s) ready to work on:
+
+{issues_text}
+
+Please review the issues above. To continue working:
+1. Run `{cmd} update <id> -s in_progress` to start the next issue
+2. Work on the issue
+3. Run `{cmd} close <id> -r "reason"` when done
+
+If no issues are appropriate to work on now, tell the user what's available."""
+
+    # Output decision to block stopping
+    output = {"decision": "block", "reason": reason}
+    click.echo(json.dumps(output))
 
 
 @main.command()
