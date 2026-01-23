@@ -23,6 +23,7 @@ from microbeads.issues import (
     get_issue,
     get_open_blockers,
     get_ready_issues,
+    hours_since,
     issue_to_json,
     list_issues,
     load_active_issues,
@@ -40,6 +41,38 @@ from microbeads.issues import (
     validate_priority,
     validate_title,
 )
+
+
+class TestHoursSince:
+    """Tests for the hours_since helper function."""
+
+    def test_hours_since_valid_timestamp(self):
+        """Test calculating hours from a valid timestamp."""
+        result = hours_since("2020-01-01T00:00:00Z")
+        assert result is not None
+        assert result > 0
+
+    def test_hours_since_none_timestamp(self):
+        """Test that None timestamp returns None."""
+        result = hours_since(None)
+        assert result is None
+
+    def test_hours_since_invalid_timestamp(self):
+        """Test that invalid timestamp returns None."""
+        result = hours_since("not-a-timestamp")
+        assert result is None
+
+    def test_hours_since_empty_string(self):
+        """Test that empty string returns None."""
+        result = hours_since("")
+        assert result is None
+
+    def test_hours_since_recent_timestamp(self):
+        """Test that recent timestamp returns small value."""
+        recent = now_iso()
+        result = hours_since(recent)
+        assert result is not None
+        assert result < 1  # Less than 1 hour ago
 
 
 class TestGenerateId:
