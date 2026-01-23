@@ -1,0 +1,13 @@
+{
+  "closed_at": "2026-01-22T10:20:03Z",
+  "closed_reason": "Added TestMergeDriverConflictResolution class with 6 E2E tests: scalar conflicts (newer timestamp wins), label union merge, dependency union merge, status conflicts, closed_at preservation, and multiple concurrent edits convergence.",
+  "compacted": true,
+  "dependency_count": 1,
+  "id": "bd-b2b0",
+  "label_count": 1,
+  "priority": 2,
+  "status": "closed",
+  "summary": "Test 3-way merge scenarios: array union for labels/deps, last-write-wins for scalars, timestamp comp",
+  "title": "E2E test: merge driver conflict resolution",
+  "type": "task"
+}

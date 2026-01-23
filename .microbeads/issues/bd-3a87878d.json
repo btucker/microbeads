@@ -1,0 +1,14 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T11:09:54Z",
+  "dependencies": [],
+  "description": "Support multiple git worktrees with shared database architecture. Ensure microbeads works correctly when the same repo has multiple worktrees checked out, with proper synchronization between them.",
+  "id": "bd-3a87878d",
+  "labels": [],
+  "priority": 3,
+  "status": "open",
+  "title": "Add git worktree support",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:09:54Z"
+}

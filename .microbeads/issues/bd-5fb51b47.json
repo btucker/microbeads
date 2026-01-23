@@ -1,0 +1,14 @@
+{
+  "closed_at": "2026-01-22T11:10:04Z",
+  "closed_reason": "Research completed, feature issues filed",
+  "created_at": "2026-01-22T11:05:55Z",
+  "dependencies": [],
+  "description": "",
+  "id": "bd-5fb51b47",
+  "labels": [],
+  "priority": 3,
+  "status": "closed",
+  "title": "Review beads reference features for potential adoption",
+  "type": "task",
+  "updated_at": "2026-01-22T11:10:04Z"
+}

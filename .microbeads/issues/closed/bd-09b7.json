@@ -1,0 +1,13 @@
+{
+  "closed_at": "2026-01-22T07:10:38Z",
+  "closed_reason": "Added E2E tests for error handling",
+  "compacted": true,
+  "dependency_count": 1,
+  "id": "bd-09b7",
+  "label_count": 1,
+  "priority": 2,
+  "status": "closed",
+  "summary": "Test: corrupted JSON recovery, partial ID ambiguity, not-in-git-repo error, uninitialized error, pus",
+  "title": "E2E test: error handling and edge cases",
+  "type": "task"
+}

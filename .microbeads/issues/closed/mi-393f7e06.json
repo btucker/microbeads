@@ -1,0 +1,25 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-22T14:53:32Z",
+  "closed_reason": "Added Performance section to README with benchmark results",
+  "created_at": "2026-01-22T14:53:02Z",
+  "dependencies": [],
+  "description": "Document performance comparison between mb and bd in the README",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-22T14:53:32Z",
+      "field": "status",
+      "new": "closed",
+      "old": "open"
+    }
+  ],
+  "id": "mi-393f7e06",
+  "labels": [],
+  "notes": "",
+  "priority": 2,
+  "status": "closed",
+  "title": "Add benchmark results to README",
+  "type": "task",
+  "updated_at": "2026-01-22T14:53:32Z"
+}

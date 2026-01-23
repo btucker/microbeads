@@ -1,0 +1,11 @@
+{
+  "closed_at": "2026-01-22T05:35:41Z",
+  "closed_reason": "Sync working",
+  "compacted": true,
+  "id": "bd-19e0",
+  "label_count": 1,
+  "priority": 1,
+  "status": "closed",
+  "title": "Verify sync works across sessions",
+  "type": "task"
+}

@@ -1,0 +1,10 @@
+{
+  "closed_at": "2026-01-22T05:19:33Z",
+  "closed_reason": "Cross-session sync implemented",
+  "compacted": true,
+  "id": "bd-66ed",
+  "priority": 2,
+  "status": "closed",
+  "title": "Test cross-session sync",
+  "type": "task"
+}

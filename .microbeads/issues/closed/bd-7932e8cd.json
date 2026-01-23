@@ -1,0 +1,10 @@
+{
+  "closed_at": "2026-01-22T10:16:05Z",
+  "closed_reason": "Implemented auto-detection of .claude directory and CLAUDE.md file in init command",
+  "compacted": true,
+  "id": "bd-7932e8cd",
+  "priority": 1,
+  "status": "closed",
+  "title": "Auto-run 'mb setup claude' in init when Claude artifacts exist",
+  "type": "feature"
+}

@@ -1,0 +1,25 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T21:58:12Z",
+  "dependencies": [],
+  "description": "",
+  "design": "Hook into PostToolUse for TodoWrite to sync tasks to microbeads issues. Create mb tasks command for manual sync. Map: pending→open, in_progress→in_progress, completed→closed",
+  "history": [
+    {
+      "at": "2026-01-22T21:58:24Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    }
+  ],
+  "id": "mi-fcec7860",
+  "labels": [],
+  "notes": "",
+  "priority": 1,
+  "status": "in_progress",
+  "title": "Persist Claude Code tasks via TodoWrite hook",
+  "type": "feature",
+  "updated_at": "2026-01-22T21:58:24Z"
+}
