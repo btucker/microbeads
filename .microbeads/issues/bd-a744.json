@@ -1,0 +1,16 @@
+{
+  "closed_at": null,
+  "closed_reason": null,
+  "created_at": "2026-01-22T06:07:17Z",
+  "dependencies": [],
+  "description": "uv run mb create feels slow. Profile startup time - may be uv overhead, venv creation, or module imports. Consider caching or lazy loading.",
+  "id": "bd-a744",
+  "labels": [
+    "performance"
+  ],
+  "priority": 2,
+  "status": "open",
+  "title": "Investigate slow uv run startup time",
+  "type": "task",
+  "updated_at": "2026-01-22T06:07:17Z"
+}
