@@ -30,26 +30,39 @@ mb sync                                     # Commit and push to orphan branch
 
 This ensures code is testable by design and provides confidence that changes work correctly.
 
-## Session Workflow
+## Session Workflow (Task-Driven)
+
+Your TodoWrite tasks are **automatically synced** to microbeads issues via hooks.
+Include the issue ID in task names for linking.
 
 ```bash
-# Start: pick an issue
-mb ready
-mb update bd-abc -s in_progress
+# 1. Session Start: Check issues and create tasks
+mb ready                                    # See what's available
+mb create "New feature" -p 1 -t feature     # Create issue if needed
 
-# During: create issues for discovered work
+# 2. Create TodoWrite tasks with issue IDs:
+#    "[mi-abc123] Implement feature"
+#    "[mi-abc123] Write tests"
+#    "[mi-def456] Fix related bug"
+
+# 3. During Work: Update tasks via TodoWrite
+#    - Tasks auto-sync to microbeads (claude-task label)
+#    - Status mapping: pending→open, in_progress→in_progress, completed→closed
+
+# 4. Exploration: file issues for anything worth addressing later
 mb create "Found edge case" -p 2 -t bug
-mb dep add bd-new bd-existing
+mb dep add mi-new mi-existing
 
-# Exploration: file issues for anything worth addressing later
-# When exploring code, always create issues for improvements,
-# tech debt, or opportunities you notice - even if unrelated
-# to your current task. Don't let discoveries get lost.
-
-# End: close and sync
-mb close bd-abc -r "Implemented and tested"
+# 5. Session End: Close issues and sync
+mb close mi-abc123 -r "Implemented and tested"
 mb sync
 ```
+
+### Task Naming Convention
+Include issue IDs in task names for traceability:
+- `[mi-abc123] Implement the feature` - Links task to issue
+- `[mi-abc123] Write tests for feature` - Multiple tasks per issue OK
+- `Review code changes` - Standalone tasks (no issue link) also work
 
 ## Landing the Plane (Session Completion)
 

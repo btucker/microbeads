@@ -15,33 +15,37 @@ from .issues import CorruptedFileError, ValidationError
 # Condensed workflow instructions for Claude Code hooks
 PRIME_TEMPLATE = """# Microbeads Issue Tracking
 
-**IMPORTANT:** Always create an issue for new user requests before starting work.
-Run `{cmd} ready` to check for existing issues first.
+## Task-Driven Workflow
+Your TodoWrite tasks are **automatically synced** to microbeads issues via hooks.
+Include the issue ID in task names for linking (e.g., "[mi-abc123] Fix the bug").
 
-## Workflow
-1. Check existing issues: `{cmd} ready`
-2. Create issue if new request: `{cmd} create "title" -p N -t type`
-3. Start work: `{cmd} update <id> -s in_progress`
-4. Complete work: `{cmd} close <id> -r "reason"`
-5. Sync: `{cmd} sync`
+### Session Start
+1. Check ready issues: `{cmd} ready`
+2. Create issue for new work: `{cmd} create "title" -p N -t type`
+3. Add tasks to TodoWrite with issue IDs in names
 
-## Commands
+### During Work
+- Update tasks via TodoWrite (auto-syncs to microbeads)
+- Tasks with 'claude-task' label track your session progress
+- Status mapping: pending→open, in_progress→in_progress, completed→closed
+
+### Session End
+- Mark tasks completed in TodoWrite
+- Close issues: `{cmd} close <id> -r "reason"`
+- Sync changes: `{cmd} sync`
+
+## Quick Reference
 ```
 {cmd} ready                         # Issues ready to work on
-{cmd} create "title" -p N -t type   # Create issue (always do this!)
-{cmd} update <id> -s in_progress    # Start work
-{cmd} close <id> -r "reason"        # Complete work
-{cmd} dep add <child> <parent>      # Add dependency
+{cmd} create "title" -p N -t type   # Create new issue
+{cmd} close <id> -r "reason"        # Complete issue
+{cmd} tasks list                    # View synced tasks
 {cmd} sync                          # Save to git
-{cmd} doctor                        # Check for problems
 ```
 
 ## Status: open | in_progress | blocked | closed
 ## Priority: P0 (critical) to P4 (low)
 ## Types: bug | feature | task | epic | chore
-
-## Additional Fields (optional)
---design "approach" --notes "context" --acceptance-criteria "done when..."
 """
 
 
