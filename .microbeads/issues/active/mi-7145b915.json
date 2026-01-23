@@ -1,5 +1,7 @@
 {
   "acceptance_criteria": "",
+  "claimed_at": "2026-01-23T12:40:15Z",
+  "claimed_by": "claude/code-hook-issue-review-xiSb2",
   "closed_at": null,
   "closed_reason": null,
   "created_at": "2026-01-23T11:17:58Z",
@@ -12,6 +14,24 @@
       "field": "status",
       "new": "in_progress",
       "old": "open"
+    },
+    {
+      "at": "2026-01-23T12:40:15Z",
+      "field": "status",
+      "new": "open",
+      "old": "in_progress"
+    },
+    {
+      "at": "2026-01-23T12:40:15Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-23T12:40:15Z",
+      "field": "claimed_by",
+      "new": "claude/code-hook-issue-review-xiSb2",
+      "old": null
     }
   ],
   "id": "mi-7145b915",
@@ -21,5 +41,5 @@
   "status": "in_progress",
   "title": "Add agent ownership tracking for claimed issues",
   "type": "feature",
-  "updated_at": "2026-01-23T12:38:29Z"
+  "updated_at": "2026-01-23T12:40:15Z"
 }
