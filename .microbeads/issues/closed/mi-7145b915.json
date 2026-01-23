@@ -2,8 +2,8 @@
   "acceptance_criteria": "",
   "claimed_at": "2026-01-23T12:40:15Z",
   "claimed_by": "claude/code-hook-issue-review-xiSb2",
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-23T12:56:35Z",
+  "closed_reason": "Implemented ownership tracking with claimed_by/claimed_at fields, branch-aware ready command, and comprehensive tests",
   "created_at": "2026-01-23T11:17:58Z",
   "dependencies": [],
   "description": "",
@@ -32,14 +32,20 @@
       "field": "claimed_by",
       "new": "claude/code-hook-issue-review-xiSb2",
       "old": null
+    },
+    {
+      "at": "2026-01-23T12:56:35Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
     }
   ],
   "id": "mi-7145b915",
   "labels": [],
   "notes": "Currently only auto-sync on in_progress provides race condition protection. True ownership would enable better multi-agent coordination.",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Add agent ownership tracking for claimed issues",
   "type": "feature",
-  "updated_at": "2026-01-23T12:40:15Z"
+  "updated_at": "2026-01-23T12:56:35Z"
 }

@@ -2,8 +2,8 @@
   "acceptance_criteria": "",
   "claimed_at": "2026-01-23T12:51:14Z",
   "claimed_by": "claude/code-hook-issue-review-xiSb2",
-  "closed_at": null,
-  "closed_reason": null,
+  "closed_at": "2026-01-23T12:56:35Z",
+  "closed_reason": "Implemented stale ownership detection in mb doctor with configurable threshold",
   "created_at": "2026-01-23T11:18:08Z",
   "dependencies": [
     "mi-7145b915"
@@ -22,14 +22,20 @@
       "field": "claimed_by",
       "new": "claude/code-hook-issue-review-xiSb2",
       "old": null
+    },
+    {
+      "at": "2026-01-23T12:56:35Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
     }
   ],
   "id": "mi-34e4fbd0",
   "labels": [],
   "notes": "Depends on ownership tracking. Consider: How long before ownership is stale? Should we track last activity timestamp?",
   "priority": 2,
-  "status": "in_progress",
+  "status": "closed",
   "title": "Handle stale ownership when agent abandons task",
   "type": "feature",
-  "updated_at": "2026-01-23T12:51:14Z"
+  "updated_at": "2026-01-23T12:56:35Z"
 }
