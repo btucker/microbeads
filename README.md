@@ -255,6 +255,45 @@ mb hooks remove --global
 
 This adds a `SessionStart` hook that runs `mb prime` to remind the AI agent of the microbeads workflow.
 
+### Continuous Work with Stop Hooks
+
+Microbeads can use Claude Code's Stop hook to prompt the agent to continue with additional related issues when it would otherwise stop:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run mb continue"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The `mb continue` command:
+- Checks for ready issues when the agent is about to stop
+- **Branch-aware**: On feature branches (`claude/`, `feature/`, etc.), only suggests issues related to that branch context (matching issue IDs, labels, or title keywords)
+- **Prevents infinite loops**: Uses `stop_hook_active` to avoid re-triggering
+- Returns `{"decision": "block", "reason": "..."}` to continue, or exits silently to allow stopping
+
+### Race Condition Prevention
+
+When an agent marks an issue as `in_progress`, microbeads automatically syncs to the remote to prevent multiple agents from claiming the same task:
+
+```bash
+mb update mi-abc -s in_progress
+# Automatically runs: mb sync
+```
+
+This is especially important for multi-agent scenarios where several agents may be checking for ready issues simultaneously.
+
 ## For AI Agents
 
 See [AGENTS.md](AGENTS.md) for detailed agent instructions including:
