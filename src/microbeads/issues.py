@@ -1190,6 +1190,36 @@ def _normalize_title(title: str) -> str:
     return re.sub(r"\s+", " ", title.strip().lower())
 
 
+def _extract_issue_id(content: str) -> str | None:
+    """Extract an issue ID from task content if present.
+
+    Looks for patterns like [mi-abc123] or [bd-xyz789] at the start of content.
+    Returns the issue ID (e.g., 'mi-abc123') or None if not found.
+    """
+    import re
+
+    # Match [prefix-hexchars] at the start of the string
+    # Only match actual issue IDs (hex chars), not arbitrary text like [mi-test]
+    match = re.match(r"^\[([a-z]{2,4}-[a-f0-9]{6,8})\]", content)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _strip_issue_id_prefix(content: str) -> str:
+    """Strip the [mi-xxx] prefix from content for fuzzy matching.
+
+    This allows matching tasks that have different issue ID prefixes
+    but the same descriptive text. Handles both real issue IDs like
+    [mi-abc12345] and placeholder prefixes like [mi-test].
+    """
+    import re
+
+    # Remove [prefix-anything] from the start
+    # More permissive than _extract_issue_id to handle placeholders
+    return re.sub(r"^\[[a-z]{2,4}-[a-z0-9]+\]\s*", "", content)
+
+
 def _find_best_match(
     content: str,
     existing_tasks: dict[str, dict[str, Any]],
@@ -1198,15 +1228,24 @@ def _find_best_match(
     """Find the best matching issue for a task content.
 
     Matching strategy (in order):
-    1. Exact title match
-    2. Normalized title match (case-insensitive, whitespace-normalized)
-    3. Substring match (if content is substring of title or vice versa)
+    1. Direct issue ID lookup - if content contains [mi-xxx], match that issue
+    2. Exact title match
+    3. Normalized title match (case-insensitive, whitespace-normalized)
+    4. Stripped prefix match - match on text after [mi-xxx] prefix
+    5. Substring match (if content is substring of title or vice versa)
 
     Returns the issue ID or None if no match found.
     """
+    # 1. Direct issue ID lookup - highest priority
+    # If task contains [mi-abc123], link directly to that issue
+    embedded_id = _extract_issue_id(content)
+    if embedded_id and embedded_id in existing_tasks and embedded_id not in already_matched:
+        return embedded_id
+
     # Build lookup structures
     exact_match: dict[str, str] = {}  # title -> id
     normalized_match: dict[str, str] = {}  # normalized_title -> id
+    stripped_match: dict[str, str] = {}  # stripped_normalized_title -> id
 
     for issue_id, issue in existing_tasks.items():
         if issue_id in already_matched:
@@ -1214,17 +1253,31 @@ def _find_best_match(
         title = issue["title"]
         exact_match[title] = issue_id
         normalized_match[_normalize_title(title)] = issue_id
+        # Also index by title with issue ID prefix stripped
+        stripped_title = _strip_issue_id_prefix(title)
+        if stripped_title != title:  # Only if there was a prefix to strip
+            stripped_match[_normalize_title(stripped_title)] = issue_id
 
-    # 1. Exact match
+    # 2. Exact match
     if content in exact_match:
         return exact_match[content]
 
-    # 2. Normalized match
+    # 3. Normalized match
     norm_content = _normalize_title(content)
     if norm_content in normalized_match:
         return normalized_match[norm_content]
 
-    # 3. Substring match (prefer shorter distance)
+    # 4. Stripped prefix match - match on text after [mi-xxx]
+    # This allows "[mi-test] Fix bug" to match "[mi-abc123] Fix bug"
+    stripped_content = _strip_issue_id_prefix(content)
+    norm_stripped = _normalize_title(stripped_content)
+    if norm_stripped in stripped_match:
+        return stripped_match[norm_stripped]
+    # Also check if stripped content matches any normalized title
+    if stripped_content != content and norm_stripped in normalized_match:
+        return normalized_match[norm_stripped]
+
+    # 5. Substring match (prefer shorter distance)
     # Only match if one is a substantial substring of the other (>50% overlap)
     best_match = None
     best_overlap = 0
