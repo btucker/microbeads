@@ -15,33 +15,37 @@ from .issues import CorruptedFileError, ValidationError
 # Condensed workflow instructions for Claude Code hooks
 PRIME_TEMPLATE = """# Microbeads Issue Tracking
 
-**IMPORTANT:** Always create an issue for new user requests before starting work.
-Run `{cmd} ready` to check for existing issues first.
+## Task-Driven Workflow
+Your TodoWrite tasks are **automatically synced** to microbeads issues via hooks.
+Include the issue ID in task names for linking (e.g., "[mi-abc123] Fix the bug").
 
-## Workflow
-1. Check existing issues: `{cmd} ready`
-2. Create issue if new request: `{cmd} create "title" -p N -t type`
-3. Start work: `{cmd} update <id> -s in_progress`
-4. Complete work: `{cmd} close <id> -r "reason"`
-5. Sync: `{cmd} sync`
+### Session Start
+1. Check ready issues: `{cmd} ready`
+2. Create issue for new work: `{cmd} create "title" -d "description" -p N -t type`
+3. Add tasks to TodoWrite with issue IDs in names
 
-## Commands
+### During Work
+- Update tasks via TodoWrite (auto-syncs to microbeads)
+- Tasks with 'claude-task' label track your session progress
+- Status mapping: pending→open, in_progress→in_progress, completed→closed
+
+### Session End
+- Mark tasks completed in TodoWrite
+- Close issues: `{cmd} close <id> -r "reason"`
+- Sync changes: `{cmd} sync`
+
+## Quick Reference
 ```
-{cmd} ready                         # Issues ready to work on
-{cmd} create "title" -p N -t type   # Create issue (always do this!)
-{cmd} update <id> -s in_progress    # Start work
-{cmd} close <id> -r "reason"        # Complete work
-{cmd} dep add <child> <parent>      # Add dependency
-{cmd} sync                          # Save to git
-{cmd} doctor                        # Check for problems
+{cmd} ready                                    # Issues ready to work on
+{cmd} create "title" -d "desc" -p N -t type    # Create new issue
+{cmd} close <id> -r "reason"                   # Complete issue
+{cmd} tasks list                               # View synced tasks
+{cmd} sync                                     # Save to git
 ```
 
 ## Status: open | in_progress | blocked | closed
 ## Priority: P0 (critical) to P4 (low)
 ## Types: bug | feature | task | epic | chore
-
-## Additional Fields (optional)
---design "approach" --notes "context" --acceptance-criteria "done when..."
 """
 
 
@@ -766,6 +770,201 @@ def merge_driver(base_path: str, ours_path: str, theirs_path: str):
     sys.exit(merge.merge_json_files(base_path, ours_path, theirs_path))
 
 
+@main.group()
+def tasks():
+    """Manage Claude Code task synchronization."""
+    pass
+
+
+@tasks.command("sync")
+@click.option(
+    "--stdin",
+    "from_stdin",
+    is_flag=True,
+    help="Read task list from stdin (JSON array)",
+)
+@click.option(
+    "--json-input",
+    "json_input",
+    help="JSON array of tasks",
+)
+@pass_context
+def tasks_sync(ctx: Context, from_stdin: bool, json_input: str | None):
+    """Sync Claude Code TodoWrite tasks to microbeads issues.
+
+    This command synchronizes the ephemeral task list from Claude Code's
+    TodoWrite tool with persistent microbeads issues.
+
+    Tasks can be provided via:
+    - --stdin: Read JSON from stdin (used by hooks)
+    - --json-input: Provide JSON directly as argument
+
+    Each task should have:
+    - content: Task description
+    - status: "pending" | "in_progress" | "completed"
+    - activeForm: Present continuous form (optional)
+
+    Example:
+        echo '[{"content":"Fix bug","status":"in_progress"}]' | mb tasks sync --stdin
+    """
+    # Get tasks from input
+    tasks_data = None
+
+    if from_stdin:
+        import sys as _sys
+
+        try:
+            raw = _sys.stdin.read()
+            if raw.strip():
+                tasks_data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise click.ClickException(f"Invalid JSON from stdin: {e}") from None
+    elif json_input:
+        try:
+            tasks_data = json.loads(json_input)
+        except json.JSONDecodeError as e:
+            raise click.ClickException(f"Invalid JSON input: {e}") from None
+    else:
+        raise click.ClickException("Provide tasks via --stdin or --json-input")
+
+    if not isinstance(tasks_data, list):
+        raise click.ClickException("Tasks must be a JSON array")
+
+    # Sync tasks
+    stats = issues.sync_tasks(ctx.worktree, tasks_data)
+
+    if ctx.json_output:
+        output(ctx, stats)
+    else:
+        parts = []
+        if stats["created"]:
+            parts.append(f"{stats['created']} created")
+        if stats["updated"]:
+            parts.append(f"{stats['updated']} updated")
+        if stats["closed"]:
+            parts.append(f"{stats['closed']} closed")
+        if stats["unchanged"]:
+            parts.append(f"{stats['unchanged']} unchanged")
+
+        if parts:
+            click.echo(f"Tasks synced: {', '.join(parts)}")
+        else:
+            click.echo("No tasks to sync.")
+
+
+@tasks.command("list")
+@pass_context
+def tasks_list(ctx: Context):
+    """List all Claude Code task issues.
+
+    Shows issues created from Claude Code's TodoWrite tool
+    (those with the 'claude-task' label).
+    """
+    task_issues = issues.get_task_issues(ctx.worktree)
+
+    if ctx.json_output:
+        output(ctx, task_issues)
+    else:
+        if not task_issues:
+            click.echo("No task issues found.")
+        else:
+            for issue in task_issues:
+                click.echo(format_issue_line(issue))
+
+
+@tasks.command("clear")
+@click.option("--force", is_flag=True, help="Skip confirmation")
+@pass_context
+def tasks_clear(ctx: Context, force: bool):
+    """Close all open Claude Code task issues.
+
+    This closes all issues with the 'claude-task' label that
+    are not already closed.
+    """
+    task_issues = issues.get_task_issues(ctx.worktree)
+    open_tasks = [t for t in task_issues if t.get("status") != "closed"]
+
+    if not open_tasks:
+        click.echo("No open task issues to clear.")
+        return
+
+    if not force and not ctx.json_output:
+        click.echo(f"This will close {len(open_tasks)} task issue(s):")
+        for issue in open_tasks[:5]:
+            click.echo(f"  - {issue['id']}: {issue['title']}")
+        if len(open_tasks) > 5:
+            click.echo(f"  ... and {len(open_tasks) - 5} more")
+        if not click.confirm("Continue?"):
+            click.echo("Cancelled.")
+            return
+
+    closed = 0
+    for issue in open_tasks:
+        issues.close_issue(ctx.worktree, issue["id"], reason="Task list cleared")
+        closed += 1
+
+    output(
+        ctx,
+        {"closed": closed},
+        f"Closed {closed} task issue(s).",
+    )
+
+
+@tasks.command("hook", hidden=True)
+@pass_context
+def tasks_hook(ctx: Context):
+    """Handle PostToolUse hook for TodoWrite (internal use).
+
+    This command is called by Claude Code's PostToolUse hook after
+    the TodoWrite tool is used. It reads the hook payload from stdin
+    and syncs tasks to microbeads.
+
+    Hook input format (JSON on stdin):
+    {
+        "tool_name": "TodoWrite",
+        "tool_input": {
+            "todos": [
+                {"content": "...", "status": "...", "activeForm": "..."},
+                ...
+            ]
+        },
+        "tool_response": {...}
+    }
+    """
+    import sys as _sys
+
+    try:
+        raw = _sys.stdin.read()
+        if not raw.strip():
+            # No input, silently exit
+            return
+
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        # Invalid JSON, silently exit (don't break Claude Code)
+        return
+
+    # Verify this is a TodoWrite hook call
+    tool_name = payload.get("tool_name", "")
+    if tool_name != "TodoWrite":
+        # Not our tool, silently exit
+        return
+
+    # Extract tasks from tool_input
+    tool_input = payload.get("tool_input", {})
+    tasks_data = tool_input.get("todos", [])
+
+    if not tasks_data:
+        return
+
+    # Sync tasks (silently - don't output anything that would confuse Claude)
+    try:
+        issues.sync_tasks(ctx.worktree, tasks_data)
+    except Exception:
+        # Silently ignore errors to avoid breaking Claude Code
+        pass
+
+
 def _get_current_branch() -> str | None:
     """Get the current git branch name."""
     result = subprocess.run(
@@ -945,13 +1144,21 @@ def setup():
 @setup.command("claude")
 @click.option("--global", "global_", is_flag=True, help="Install globally for all projects")
 @click.option("--remove", is_flag=True, help="Remove hooks instead of installing")
-def setup_claude(global_: bool, remove: bool):
+@click.option(
+    "--tasks/--no-tasks",
+    "install_tasks",
+    default=True,
+    help="Install PostToolUse hook to sync TodoWrite tasks (default: enabled)",
+)
+def setup_claude(global_: bool, remove: bool, install_tasks: bool):
     """Install Claude Code hooks for microbeads.
 
     Adds SessionStart hook that runs 'mb prime' which:
     - Auto-initializes microbeads if not already set up
     - Syncs to pull any remote changes
     - Outputs workflow context for the AI agent
+
+    Also adds PostToolUse hook for TodoWrite to sync tasks (unless --no-tasks).
 
     By default, installs for the current project (.claude/settings.json).
     Use --global to install for all projects (~/.claude/settings.json).
@@ -972,10 +1179,12 @@ def setup_claude(global_: bool, remove: bool):
     if remove:
         _remove_claude_hooks(settings_path, scope)
     else:
-        _install_claude_hooks(settings_dir, settings_path, scope)
+        _install_claude_hooks(settings_dir, settings_path, scope, install_tasks=install_tasks)
 
 
-def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -> None:
+def _install_claude_hooks(
+    settings_dir: Path, settings_path: Path, scope: str, install_tasks: bool = True
+) -> None:
     """Install Claude Code hooks."""
     click.echo(f"Installing Claude hooks ({scope})...")
 
@@ -993,12 +1202,12 @@ def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -
     # Get or create hooks section
     hooks = settings.setdefault("hooks", {})
 
-    # Add microbeads prime to SessionStart
-    # Use get_command_name() to detect if mb is available
-    command = f"{get_command_name()} prime"
-    hook_entry = {"matcher": "", "hooks": [{"type": "command", "command": command}]}
+    # Add microbeads prime to SessionStart and PreCompact
+    cmd = get_command_name()
+    prime_command = f"{cmd} prime"
+    prime_hook_entry = {"matcher": "", "hooks": [{"type": "command", "command": prime_command}]}
 
-    for event in ["SessionStart"]:
+    for event in ["SessionStart", "PreCompact"]:
         event_hooks = hooks.get(event, [])
         if not isinstance(event_hooks, list):
             event_hooks = []
@@ -1008,16 +1217,46 @@ def _install_claude_hooks(settings_dir: Path, settings_path: Path, scope: str) -
         for hook in event_hooks:
             if isinstance(hook, dict):
                 for h in hook.get("hooks", []):
-                    if isinstance(h, dict) and h.get("command") == command:
+                    if isinstance(h, dict) and h.get("command") == prime_command:
                         already_installed = True
                         break
 
         if already_installed:
             click.echo(f"  {event}: already installed")
         else:
-            event_hooks.append(hook_entry)
+            event_hooks.append(prime_hook_entry)
             hooks[event] = event_hooks
             click.echo(f"  {event}: installed")
+
+    # Add PostToolUse hook for TodoWrite task syncing
+    if install_tasks:
+        tasks_command = f"{cmd} tasks hook"
+        tasks_hook_entry = {
+            "matcher": "TodoWrite",
+            "hooks": [{"type": "command", "command": tasks_command}],
+        }
+
+        event_hooks = hooks.get("PostToolUse", [])
+        if not isinstance(event_hooks, list):
+            event_hooks = []
+
+        # Check if already installed
+        already_installed = False
+        for hook in event_hooks:
+            if isinstance(hook, dict):
+                matcher = hook.get("matcher", "")
+                if matcher == "TodoWrite":
+                    for h in hook.get("hooks", []):
+                        if isinstance(h, dict) and "tasks hook" in h.get("command", ""):
+                            already_installed = True
+                            break
+
+        if already_installed:
+            click.echo("  PostToolUse (TodoWrite): already installed")
+        else:
+            event_hooks.append(tasks_hook_entry)
+            hooks["PostToolUse"] = event_hooks
+            click.echo("  PostToolUse (TodoWrite): installed")
 
     # Write settings
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
@@ -1042,9 +1281,11 @@ def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
 
     hooks = settings.get("hooks", {})
     # Check for both old and new command formats
-    commands_to_remove = ["uvx microbeads prime", "mb prime"]
+    prime_commands = ["uvx microbeads prime", "mb prime", "uv run mb prime"]
+    tasks_commands = ["mb tasks hook", "uv run mb tasks hook"]
 
-    for event in ["SessionStart"]:
+    # Remove from SessionStart and PreCompact
+    for event in ["SessionStart", "PreCompact"]:
         event_hooks = hooks.get(event, [])
         if not isinstance(event_hooks, list):
             continue
@@ -1055,11 +1296,11 @@ def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
         for hook in event_hooks:
             if isinstance(hook, dict):
                 hook_commands = hook.get("hooks", [])
-                has_microbeads_prime = any(
-                    isinstance(h, dict) and h.get("command") in commands_to_remove
+                has_microbeads = any(
+                    isinstance(h, dict) and h.get("command") in prime_commands
                     for h in hook_commands
                 )
-                if has_microbeads_prime:
+                if has_microbeads:
                     removed = True
                     continue
             filtered.append(hook)
@@ -1070,6 +1311,30 @@ def _remove_claude_hooks(settings_path: Path, scope: str) -> None:
             else:
                 del hooks[event]
             click.echo(f"  {event}: removed")
+
+    # Remove PostToolUse hook for TodoWrite
+    event_hooks = hooks.get("PostToolUse", [])
+    if isinstance(event_hooks, list):
+        filtered = []
+        removed = False
+        for hook in event_hooks:
+            if isinstance(hook, dict):
+                hook_commands = hook.get("hooks", [])
+                has_tasks_hook = any(
+                    isinstance(h, dict) and h.get("command") in tasks_commands
+                    for h in hook_commands
+                )
+                if has_tasks_hook:
+                    removed = True
+                    continue
+            filtered.append(hook)
+
+        if removed:
+            if filtered:
+                hooks["PostToolUse"] = filtered
+            else:
+                del hooks["PostToolUse"]
+            click.echo("  PostToolUse (TodoWrite): removed")
 
     # Write settings
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")

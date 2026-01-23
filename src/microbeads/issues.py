@@ -1257,6 +1257,304 @@ def run_doctor(
     }
 
 
+# Label used to identify issues created from Claude Code TodoWrite
+TASK_LABEL = "claude-task"
+
+# Status mapping from TodoWrite to microbeads
+TASK_STATUS_MAP = {
+    "pending": Status.OPEN,
+    "in_progress": Status.IN_PROGRESS,
+    "completed": Status.CLOSED,
+}
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a title for fuzzy matching.
+
+    Removes extra whitespace and lowercases for comparison.
+    """
+    import re
+
+    # Collapse whitespace and lowercase
+    return re.sub(r"\s+", " ", title.strip().lower())
+
+
+def _extract_issue_id(content: str) -> str | None:
+    """Extract an issue ID from task content if present.
+
+    Looks for patterns like [mi-abc123] or [bd-xyz789] at the start of content.
+    Returns the issue ID (e.g., 'mi-abc123') or None if not found.
+    """
+    import re
+
+    # Match [prefix-hexchars] at the start of the string
+    # Only match actual issue IDs (hex chars), not arbitrary text like [mi-test]
+    match = re.match(r"^\[([a-z]{2,4}-[a-f0-9]{6,8})\]", content)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _strip_issue_id_prefix(content: str) -> str:
+    """Strip the [mi-xxx] prefix from content for fuzzy matching.
+
+    This allows matching tasks that have different issue ID prefixes
+    but the same descriptive text. Handles both real issue IDs like
+    [mi-abc12345] and placeholder prefixes like [mi-test].
+    """
+    import re
+
+    # Remove [prefix-anything] from the start
+    # More permissive than _extract_issue_id to handle placeholders
+    return re.sub(r"^\[[a-z]{2,4}-[a-z0-9]+\]\s*", "", content)
+
+
+def _find_best_match(
+    content: str,
+    existing_tasks: dict[str, dict[str, Any]],
+    already_matched: set[str],
+) -> str | None:
+    """Find the best matching issue for a task content.
+
+    Matching strategy (in order):
+    1. Direct issue ID lookup - if content contains [mi-xxx], match that issue
+    2. Exact title match
+    3. Normalized title match (case-insensitive, whitespace-normalized)
+    4. Stripped prefix match - match on text after [mi-xxx] prefix
+    5. Substring match (if content is substring of title or vice versa)
+
+    Returns the issue ID or None if no match found.
+    """
+    # 1. Direct issue ID lookup - highest priority
+    # If task contains [mi-abc123], link directly to that issue
+    embedded_id = _extract_issue_id(content)
+    if embedded_id and embedded_id in existing_tasks and embedded_id not in already_matched:
+        return embedded_id
+
+    # Build lookup structures
+    exact_match: dict[str, str] = {}  # title -> id
+    normalized_match: dict[str, str] = {}  # normalized_title -> id
+    stripped_match: dict[str, str] = {}  # stripped_normalized_title -> id
+
+    for issue_id, issue in existing_tasks.items():
+        if issue_id in already_matched:
+            continue
+        title = issue["title"]
+        exact_match[title] = issue_id
+        normalized_match[_normalize_title(title)] = issue_id
+        # Also index by title with issue ID prefix stripped
+        stripped_title = _strip_issue_id_prefix(title)
+        if stripped_title != title:  # Only if there was a prefix to strip
+            stripped_match[_normalize_title(stripped_title)] = issue_id
+
+    # 2. Exact match
+    if content in exact_match:
+        return exact_match[content]
+
+    # 3. Normalized match
+    norm_content = _normalize_title(content)
+    if norm_content in normalized_match:
+        return normalized_match[norm_content]
+
+    # 4. Stripped prefix match - match on text after [mi-xxx]
+    # This allows "[mi-test] Fix bug" to match "[mi-abc123] Fix bug"
+    stripped_content = _strip_issue_id_prefix(content)
+    norm_stripped = _normalize_title(stripped_content)
+    if norm_stripped in stripped_match:
+        return stripped_match[norm_stripped]
+    # Also check if stripped content matches any normalized title
+    if stripped_content != content and norm_stripped in normalized_match:
+        return normalized_match[norm_stripped]
+
+    # 5. Substring match (prefer shorter distance)
+    # Only match if one is a substantial substring of the other (>50% overlap)
+    best_match = None
+    best_overlap = 0
+
+    for issue_id, issue in existing_tasks.items():
+        if issue_id in already_matched:
+            continue
+
+        title = issue["title"]
+        norm_title = _normalize_title(title)
+
+        # Check if one contains the other
+        if norm_content in norm_title or norm_title in norm_content:
+            # Calculate overlap ratio
+            shorter = min(len(norm_content), len(norm_title))
+            longer = max(len(norm_content), len(norm_title))
+            overlap = shorter / longer if longer > 0 else 0
+
+            # Only accept if >50% overlap (to avoid false positives)
+            if overlap > 0.5 and overlap > best_overlap:
+                best_match = issue_id
+                best_overlap = overlap
+
+    return best_match
+
+
+def sync_tasks(
+    worktree: Path,
+    tasks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Sync Claude Code TodoWrite tasks to microbeads issues.
+
+    This function synchronizes the ephemeral task list from Claude Code's
+    TodoWrite tool with persistent microbeads issues.
+
+    Args:
+        worktree: Path to the worktree
+        tasks: List of tasks from TodoWrite, each with:
+            - content: Task description (used as title)
+            - status: "pending" | "in_progress" | "completed"
+            - activeForm: Present continuous form (stored in notes)
+
+    Returns:
+        Dict with sync statistics:
+            - created: Number of new issues created
+            - updated: Number of existing issues updated
+            - closed: Number of issues closed
+            - unchanged: Number of issues that didn't need changes
+            - issues: List of issue IDs in task order
+
+    The sync uses multi-level matching to prevent duplicates:
+    1. Exact title match
+    2. Normalized match (case-insensitive, whitespace-normalized)
+    3. Substring match with >50% overlap threshold
+    """
+    # Load existing task-labeled issues
+    active_issues = load_active_issues(worktree)
+    closed_issues = load_closed_issues(worktree)
+
+    # Get all issues with the claude-task label
+    existing_tasks: dict[str, dict[str, Any]] = {}
+    for issue in active_issues.values():
+        if TASK_LABEL in issue.get("labels", []):
+            existing_tasks[issue["id"]] = issue
+    for issue in closed_issues.values():
+        if TASK_LABEL in issue.get("labels", []):
+            existing_tasks[issue["id"]] = issue
+
+    # Track statistics
+    stats = {
+        "created": 0,
+        "updated": 0,
+        "closed": 0,
+        "unchanged": 0,
+        "issues": [],
+    }
+
+    # Track which existing tasks were matched (prevents double-matching)
+    matched_ids: set[str] = set()
+
+    # Process each task
+    for task in tasks:
+        content = task.get("content", "").strip()
+        if not content:
+            continue
+
+        task_status = task.get("status", "pending")
+        active_form = task.get("activeForm", "")
+
+        # Map TodoWrite status to microbeads status
+        mb_status = TASK_STATUS_MAP.get(task_status, Status.OPEN)
+
+        # Try to find matching existing issue using multi-level matching
+        matched_id = _find_best_match(content, existing_tasks, matched_ids)
+
+        if matched_id:
+            # Update existing issue
+            matched_ids.add(matched_id)
+            issue = existing_tasks[matched_id]
+
+            current_status = issue.get("status")
+            current_notes = issue.get("notes", "")
+            current_title = issue.get("title", "")
+
+            needs_update = False
+
+            # Check if status changed
+            if current_status != mb_status.value:
+                needs_update = True
+
+            # Check if notes (activeForm) changed
+            if current_notes != active_form:
+                needs_update = True
+
+            # Check if title changed (update to new wording)
+            if current_title != content:
+                needs_update = True
+
+            if needs_update:
+                if mb_status == Status.CLOSED:
+                    # Update title first if changed, then close
+                    if current_title != content:
+                        update_issue(worktree, matched_id, title=content)
+                    close_issue(worktree, matched_id, reason="Task completed")
+                    stats["closed"] += 1
+                else:
+                    update_issue(
+                        worktree,
+                        matched_id,
+                        status=mb_status,
+                        title=content if current_title != content else None,
+                        notes=active_form if active_form else None,
+                    )
+                    stats["updated"] += 1
+            else:
+                stats["unchanged"] += 1
+
+            stats["issues"].append(matched_id)
+        else:
+            # Create new issue
+            issue = create_issue(
+                title=content,
+                worktree=worktree,
+                issue_type=IssueType.TASK,
+                priority=2,
+                labels=[TASK_LABEL],
+                notes=active_form,
+            )
+
+            # Set initial status
+            if mb_status != Status.OPEN:
+                issue["status"] = mb_status.value
+                if mb_status == Status.CLOSED:
+                    issue["closed_at"] = now_iso()
+                    issue["closed_reason"] = "Task completed"
+
+            save_issue(worktree, issue)
+            stats["created"] += 1
+            stats["issues"].append(issue["id"])
+
+            # Add to existing_tasks for potential duplicate detection in same batch
+            existing_tasks[issue["id"]] = issue
+            matched_ids.add(issue["id"])
+
+    # Note: We don't automatically close unmatched existing tasks
+    # because the task list might be partial (e.g., user cleared it)
+    # If needed, this could be added as an option
+
+    return stats
+
+
+def get_task_issues(worktree: Path) -> list[dict[str, Any]]:
+    """Get all issues created from Claude Code tasks.
+
+    Returns issues with the 'claude-task' label, sorted by creation time.
+    """
+    all_issues = load_all_issues(worktree)
+    tasks = []
+
+    for issue in all_issues.values():
+        if TASK_LABEL in issue.get("labels", []):
+            tasks.append(issue)
+
+    # Sort by created_at
+    tasks.sort(key=lambda x: x.get("created_at", ""))
+    return tasks
+
+
 def migrate_flat_to_status_dirs(worktree: Path) -> int:
     """Migrate issues from flat structure to active/closed directories.
 

@@ -7,13 +7,13 @@ Microbeads is a simplified git-backed issue tracker. Issues are JSON files on th
 ## Quick Reference
 
 ```bash
-mb create "Title" -p 1 -t bug -l backend   # Create issue
+mb create "Title" -d "Description of the work" -p 1 -t bug   # Create issue
 mb list                                     # All issues
 mb ready                                    # Issues with no blockers
-mb show bd-abc                              # Show details
-mb update bd-abc -s in_progress             # Change status
-mb close bd-abc -r "Completed"              # Close with reason
-mb dep add bd-child bd-parent               # Add dependency
+mb show mi-abc                              # Show details
+mb update mi-abc -s in_progress             # Change status
+mb close mi-abc -r "Completed"              # Close with reason
+mb dep add mi-child mi-parent               # Add dependency
 mb sync                                     # Commit and push to orphan branch
 ```
 
@@ -30,26 +30,39 @@ mb sync                                     # Commit and push to orphan branch
 
 This ensures code is testable by design and provides confidence that changes work correctly.
 
-## Session Workflow
+## Session Workflow (Task-Driven)
+
+Your TodoWrite tasks are **automatically synced** to microbeads issues via hooks.
+Include the issue ID in task names for linking.
 
 ```bash
-# Start: pick an issue
-mb ready
-mb update bd-abc -s in_progress
+# 1. Session Start: Check issues and create tasks
+mb ready                                    # See what's available
+mb create "New feature" -d "Implement X for Y" -p 1 -t feature   # Create issue
 
-# During: create issues for discovered work
-mb create "Found edge case" -p 2 -t bug
-mb dep add bd-new bd-existing
+# 2. Create TodoWrite tasks with issue IDs:
+#    "[mi-abc123] Implement feature"
+#    "[mi-abc123] Write tests"
+#    "[mi-def456] Fix related bug"
 
-# Exploration: file issues for anything worth addressing later
-# When exploring code, always create issues for improvements,
-# tech debt, or opportunities you notice - even if unrelated
-# to your current task. Don't let discoveries get lost.
+# 3. During Work: Update tasks via TodoWrite
+#    - Tasks auto-sync to microbeads (claude-task label)
+#    - Status mapping: pending→open, in_progress→in_progress, completed→closed
 
-# End: close and sync
-mb close bd-abc -r "Implemented and tested"
+# 4. Exploration: file issues for anything worth addressing later
+mb create "Found edge case" -d "When X happens, Y breaks" -p 2 -t bug
+mb dep add mi-new mi-existing
+
+# 5. Session End: Close issues and sync
+mb close mi-abc123 -r "Implemented and tested"
 mb sync
 ```
+
+### Task Naming Convention
+Include issue IDs in task names for traceability:
+- `[mi-abc123] Implement the feature` - Links task to issue
+- `[mi-abc123] Write tests for feature` - Multiple tasks per issue OK
+- `Review code changes` - Standalone tasks (no issue link) also work
 
 ## Landing the Plane (Session Completion)
 
