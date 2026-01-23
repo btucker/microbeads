@@ -1,0 +1,39 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T13:25:46Z",
+  "closed_reason": "Test cleanup",
+  "created_at": "2026-01-23T13:23:45Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T13:23:58Z",
+      "field": "title",
+      "new": "[mi-f457ceb6] Test improved matching",
+      "old": "[mi-test] Test improved matching"
+    },
+    {
+      "at": "2026-01-23T13:23:58Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    },
+    {
+      "at": "2026-01-23T13:25:46Z",
+      "field": "status",
+      "new": "closed",
+      "old": "closed"
+    }
+  ],
+  "id": "mi-f457ceb6",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Testing",
+  "priority": 2,
+  "status": "closed",
+  "title": "[mi-f457ceb6] Test improved matching",
+  "type": "task",
+  "updated_at": "2026-01-23T13:25:46Z"
+}

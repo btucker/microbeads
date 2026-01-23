@@ -1,0 +1,11 @@
+{
+  "closed_at": "2026-01-22T11:17:50Z",
+  "closed_reason": "Implemented in this branch",
+  "compacted": true,
+  "id": "bd-160ad30e",
+  "priority": 2,
+  "status": "closed",
+  "summary": "Implement a doctor command that detects problems like orphaned issues, stale state, and other incons",
+  "title": "Add mb doctor command for health checks",
+  "type": "feature"
+}

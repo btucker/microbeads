@@ -1,0 +1,14 @@
+{
+  "closed_at": "2026-01-22T11:25:12Z",
+  "closed_reason": "Implemented mb hooks install/remove commands",
+  "created_at": "2026-01-22T11:17:40Z",
+  "dependencies": [],
+  "description": "Implement mb hooks install command to set up git hooks for automated synchronization.",
+  "id": "bd-dab06213",
+  "labels": [],
+  "priority": 3,
+  "status": "closed",
+  "title": "Add git hooks integration",
+  "type": "feature",
+  "updated_at": "2026-01-22T11:25:12Z"
+}

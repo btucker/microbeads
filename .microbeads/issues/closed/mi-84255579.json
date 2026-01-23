@@ -1,0 +1,31 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T12:39:33Z",
+  "closed_reason": "Updated PRIME_TEMPLATE and AGENTS.md with task-driven workflow instructions",
+  "created_at": "2026-01-23T12:38:03Z",
+  "dependencies": [],
+  "description": "",
+  "design": "Update PRIME_TEMPLATE to guide agents to: 1) Pull issues with mb ready, 2) Create TodoWrite tasks with issue IDs in names, 3) Let hooks auto-sync to mb",
+  "history": [
+    {
+      "at": "2026-01-23T12:38:14Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-23T12:39:33Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-84255579",
+  "labels": [],
+  "notes": "",
+  "priority": 1,
+  "status": "closed",
+  "title": "Update agent instructions for task-driven workflow",
+  "type": "task",
+  "updated_at": "2026-01-23T12:39:33Z"
+}

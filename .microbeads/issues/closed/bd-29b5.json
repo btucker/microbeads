@@ -1,0 +1,13 @@
+{
+  "closed_at": "2026-01-22T07:10:38Z",
+  "closed_reason": "Added E2E tests for happy path workflow",
+  "compacted": true,
+  "dependency_count": 1,
+  "id": "bd-29b5",
+  "label_count": 1,
+  "priority": 1,
+  "status": "closed",
+  "summary": "Test init\u2192create\u2192list\u2192update\u2192close\u2192sync flow in temp git repo. Verify git history and JSON files.",
+  "title": "E2E test: happy path workflow",
+  "type": "task"
+}

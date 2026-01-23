@@ -1,0 +1,10 @@
+{
+  "closed_at": "2026-01-22T05:16:56Z",
+  "closed_reason": "Proactive detection implemented",
+  "compacted": true,
+  "id": "bd-d2b9",
+  "priority": 2,
+  "status": "closed",
+  "title": "Test proactive session detection",
+  "type": "task"
+}

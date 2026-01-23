@@ -1,0 +1,13 @@
+{
+  "closed_at": "2026-01-22T10:38:17Z",
+  "closed_reason": "Added TestBeadsImport class with 3 E2E tests: init without import, init with missing bd error handling, and import with mocked bd script. Tests cover both the error case and successful import scenario.",
+  "compacted": true,
+  "dependency_count": 1,
+  "id": "bd-08db",
+  "label_count": 1,
+  "priority": 3,
+  "status": "closed",
+  "summary": "Test --import-beads flag: field mapping from beads schema, duplicate detection, missing bd CLI handl",
+  "title": "E2E test: beads import",
+  "type": "task"
+}
