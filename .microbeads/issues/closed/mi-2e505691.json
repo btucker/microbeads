@@ -1,0 +1,27 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T15:59:43Z",
+  "closed_reason": "Task completed",
+  "created_at": "2026-01-23T15:58:58Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:59:43Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-2e505691",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Committing and pushing changes",
+  "priority": 2,
+  "status": "closed",
+  "title": "Commit and push changes",
+  "type": "task",
+  "updated_at": "2026-01-23T15:59:43Z"
+}

@@ -1,0 +1,33 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T15:51:27Z",
+  "closed_reason": "Task completed",
+  "created_at": "2026-01-23T15:50:30Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:51:16Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-23T15:51:27Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-293f225d",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Adding async sync call after close command",
+  "priority": 2,
+  "status": "closed",
+  "title": "Add async sync call after close command",
+  "type": "task",
+  "updated_at": "2026-01-23T15:51:27Z"
+}

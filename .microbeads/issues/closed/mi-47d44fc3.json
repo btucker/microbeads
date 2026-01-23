@@ -1,0 +1,27 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T15:50:44Z",
+  "closed_reason": "Task completed",
+  "created_at": "2026-01-23T15:50:30Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:50:44Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-47d44fc3",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Adding async sync helper function to cli.py",
+  "priority": 2,
+  "status": "closed",
+  "title": "Add async sync helper function to cli.py",
+  "type": "task",
+  "updated_at": "2026-01-23T15:50:44Z"
+}

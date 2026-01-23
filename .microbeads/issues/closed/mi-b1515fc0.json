@@ -1,0 +1,33 @@
+{
+  "acceptance_criteria": "",
+  "closed_at": "2026-01-23T15:58:58Z",
+  "closed_reason": "Task completed",
+  "created_at": "2026-01-23T15:50:30Z",
+  "dependencies": [],
+  "description": "",
+  "design": "",
+  "history": [
+    {
+      "at": "2026-01-23T15:52:25Z",
+      "field": "status",
+      "new": "in_progress",
+      "old": "open"
+    },
+    {
+      "at": "2026-01-23T15:58:58Z",
+      "field": "status",
+      "new": "closed",
+      "old": "in_progress"
+    }
+  ],
+  "id": "mi-b1515fc0",
+  "labels": [
+    "claude-task"
+  ],
+  "notes": "Running tests to verify changes",
+  "priority": 2,
+  "status": "closed",
+  "title": "Run tests to verify changes",
+  "type": "task",
+  "updated_at": "2026-01-23T15:58:58Z"
+}
